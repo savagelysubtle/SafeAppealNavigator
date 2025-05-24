@@ -19,7 +19,7 @@ We would like to officially thank [WarmShao](https://github.com/warmshao) for hi
 
 **Persistent Browser Sessions:** You can choose to keep the browser window open between AI tasks, allowing you to see the complete history and state of AI interactions.
 
-<video src="https://github.com/user-attachments/assets/56bc7080-f2e3-4367-af22-6bf2245ff6cb" controls="controls">Your browser does not support playing this video!</video>
+
 
 ## Installation Guide
 
@@ -158,7 +158,7 @@ TARGETPLATFORM=linux/arm64 docker compose up --build
 
 **An advanced AI-powered research assistant with specialized legal research capabilities, multi-LLM support, and intelligent document generation.**
 
-Built upon the foundation of browser-use, this enhanced research assistant has evolved into a comprehensive tool for complex research tasks, with particular strength in legal case analysis and document generation.
+Built upon the foundation of [browser-use](https://github.com/browser-use/browser-use), this enhanced research assistant has evolved into a comprehensive tool for complex research tasks, with particular strength in legal case analysis and document generation.
 
 ## ✨ Key Features
 
@@ -206,19 +206,26 @@ Built upon the foundation of browser-use, this enhanced research assistant has e
    cd ai-research-assistant
    ```
 
-2. **Set Up Environment**
-   ```bash
-   # Using uv (recommended)
-   uv venv --python 3.13
+2. **Set Up Python Environment**
+   We recommend using [uv](https://docs.astral.sh/uv/) for managing the Python environment.
 
-   # Activate virtual environment
-   # Windows PowerShell:
-   .\.venv\Scripts\Activate.ps1
-   # Windows CMD:
-   .venv\Scripts\activate
-   # macOS/Linux:
-   source .venv/bin/activate
+   ```bash
+   uv venv --python 3.13
    ```
+
+   Activate the virtual environment:
+   - **Windows (PowerShell):**
+     ```powershell
+     .\.venv\Scripts\Activate.ps1
+     ```
+   - **Windows (Command Prompt):**
+     ```cmd
+     .venv\Scripts\activate
+     ```
+   - **macOS/Linux:**
+     ```bash
+     source .venv/bin/activate
+     ```
 
 3. **Install Dependencies**
    ```bash
@@ -230,9 +237,13 @@ Built upon the foundation of browser-use, this enhanced research assistant has e
 
 4. **Configure Environment**
    ```bash
+   # Windows (PowerShell/Command Prompt):
    cp .env.example .env
-   # Edit .env with your API keys and settings
+   # macOS/Linux:
+   cp .env.example .env
    ```
+
+   Open `.env` in your preferred text editor and add your API keys and other settings.
 
 5. **Launch the Assistant**
    ```bash
@@ -241,21 +252,22 @@ Built upon the foundation of browser-use, this enhanced research assistant has e
 
    Open your browser and navigate to `http://127.0.0.1:7788`
 
-### Docker Installation (Alternative)
-
-```bash
-# Clone and configure
-git clone https://github.com/savagelysubtle/ai-research-assistant.git
-cd ai-research-assistant
-cp .env.example .env
-
-# Build and run
-docker compose up --build
-
-# Access interfaces
-# Web UI: http://localhost:7788
-# VNC Viewer: http://localhost:6080/vnc.html
-```
+6. **Using Your Own Browser (Optional)**
+   - Set `BROWSER_PATH` to the executable path of your browser and `BROWSER_USER_DATA` to the user data directory of your browser. Leave `BROWSER_USER_DATA` empty if you want to use local user data.
+     - **Windows**
+       ```env
+       BROWSER_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
+       BROWSER_USER_DATA="C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
+       ```
+       > Note: Replace `YourUsername` with your actual Windows username.
+     - **Mac**
+       ```env
+       BROWSER_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+       BROWSER_USER_DATA="/Users/YourUsername/Library/Application Support/Google/Chrome"
+       ```
+   - Close all Chrome windows
+   - Open the WebUI in a non-Chrome browser, such as Firefox or Edge. This is important because the persistent browser context will use the Chrome data when running the agent.
+   - Check the "Use Own Browser" option within the Browser Settings.
 
 ## 📖 Usage Guide
 
@@ -431,10 +443,16 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 🙏 Acknowledgments
 
-- **Original Foundation**: Built upon the browser-use framework
-- **Legal Data Sources**: WCAT and CanLII for case access
+This project builds upon the excellent foundation provided by the open-source community:
+
+- **[Browser-Use Framework](https://github.com/browser-use/browser-use)**: The core browser automation framework that powers this assistant
+- **[Browser-Use Web UI](https://github.com/browser-use/web-ui)**: Original web interface inspiration and architecture
+- **[WarmShao](https://github.com/warmshao)**: Original creator of browser-use-webui that inspired many features
+- **Legal Data Sources**: WCAT and CanLII for providing accessible legal case databases
 - **AI Providers**: OpenAI, Anthropic, Google, DeepSeek for model access
-- **Community**: Contributors and users who have shaped this project
+- **Open Source Community**: All contributors who have shaped browser automation and AI research tools
+
+**Special Thanks**: We extend our gratitude to the browser-use team for creating such a robust foundation for AI-powered web interaction. This project represents an evolution and specialization of their excellent work, focused specifically on legal research and document generation use cases.
 
 ## 🆘 Support
 

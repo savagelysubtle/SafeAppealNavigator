@@ -282,3 +282,11 @@ temp/
 test_data/
 test_output/
 test_results/
+
+# Future Plans
+plans/
+plans/**
+plans/**/*
+
+# Github
+.github/
