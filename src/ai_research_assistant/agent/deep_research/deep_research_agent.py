@@ -30,10 +30,12 @@ from langchain_core.tools import StructuredTool, Tool
 from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 
-from src.browser_use_web_ui.agent.browser_use.browser_use_agent import BrowserUseAgent
-from src.browser_use_web_ui.browser.custom_browser import CustomBrowser
-from src.browser_use_web_ui.controller.custom_controller import CustomController
-from src.browser_use_web_ui.utils.mcp_client import setup_mcp_client_and_tools
+from src.ai_research_assistant.agent.browser_use.browser_use_agent import (
+    BrowserUseAgent,
+)
+from src.ai_research_assistant.browser.custom_browser import CustomBrowser
+from src.ai_research_assistant.controller.custom_controller import CustomController
+from src.ai_research_assistant.utils.mcp_client import setup_mcp_client_and_tools
 
 logger = logging.getLogger(__name__)
 

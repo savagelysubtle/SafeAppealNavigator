@@ -33,8 +33,8 @@ except ImportError:
     HAS_PYPDF2 = False
     PdfReader = None
 
-from src.browser_use_web_ui.browser.custom_browser import CustomBrowser
-from src.browser_use_web_ui.browser.custom_context import CustomBrowserContext
+from src.ai_research_assistant.browser.custom_browser import CustomBrowser
+from src.ai_research_assistant.browser.custom_context import CustomBrowserContext
 
 from .enhanced_legal_features import (
     CaseProgressTracker,

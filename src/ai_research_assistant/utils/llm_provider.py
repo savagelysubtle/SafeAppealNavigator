@@ -20,7 +20,71 @@ from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from openai import OpenAI
 
-from src.browser_use_web_ui.utils import config
+from src.ai_research_assistant.utils.env_manager import env_manager
+
+
+def _create_google_provider(**kwargs):
+    """
+    Create Google Generative AI provider with enhanced configuration support.
+
+    This function implements the Google API migration plan Option 1:
+    - Maintains LangChain integration
+    - Uses latest langchain-google-genai package
+    - Supports advanced configuration options
+
+    Args:
+        **kwargs: Configuration parameters including:
+            - model_name: Model to use (default: gemini-2.0-flash-exp)
+            - temperature: Temperature setting (default: 0.0)
+            - max_tokens: Maximum output tokens
+            - top_p, top_k: Sampling parameters
+            - safety_settings: Google-specific safety settings
+            - api_key: API key (retrieved from environment if not provided)
+
+    Returns:
+        ChatGoogleGenerativeAI: Configured Google provider instance
+    """
+    # Get API key from kwargs or environment
+    api_key = kwargs.get("api_key", "") or env_manager.get_api_key("google")
+    if not api_key:
+        error_msg = env_manager.create_error_message("google")
+        raise ValueError(error_msg)
+
+    # Enhanced model configuration
+    model_name = kwargs.get("model_name", "gemini-2.0-flash-exp")
+
+    # Build generation configuration
+    generation_config = {}
+    if "max_tokens" in kwargs:
+        generation_config["max_output_tokens"] = kwargs["max_tokens"]
+    if "top_p" in kwargs:
+        generation_config["top_p"] = kwargs["top_p"]
+    if "top_k" in kwargs:
+        generation_config["top_k"] = kwargs["top_k"]
+
+    # Safety settings support
+    safety_settings = kwargs.get("safety_settings", None)
+
+    # Additional Google-specific configurations
+    project_id = kwargs.get("project_id") or env_manager.get_provider_config(
+        "google"
+    ).get("project_id")
+
+    provider_kwargs = {
+        "model": model_name,
+        "temperature": kwargs.get("temperature", 0.0),
+        "api_key": api_key,
+    }
+
+    # Add optional configurations only if they exist
+    if generation_config:
+        provider_kwargs["generation_config"] = generation_config
+    if safety_settings:
+        provider_kwargs["safety_settings"] = safety_settings
+    if project_id:
+        provider_kwargs["project_id"] = project_id
+
+    return ChatGoogleGenerativeAI(**provider_kwargs)
 
 
 class DeepSeekR1ChatOpenAI(ChatOpenAI):
@@ -122,20 +186,17 @@ def get_llm_model(provider: str, **kwargs):
     :param kwargs:
     :return:
     """
+    # Use environment manager for API key validation and retrieval
     if provider not in ["ollama", "bedrock"]:
-        env_var = f"{provider.upper()}_API_KEY"
-        api_key = kwargs.get("api_key", "") or os.getenv(env_var, "")
+        api_key = kwargs.get("api_key", "") or env_manager.get_api_key(provider)
         if not api_key:
-            provider_display = config.PROVIDER_DISPLAY_NAMES.get(
-                provider, provider.upper()
-            )
-            error_msg = f"💥 {provider_display} API key not found! 🔑 Please set the `{env_var}` environment variable or provide it in the UI."
+            error_msg = env_manager.create_error_message(provider)
             raise ValueError(error_msg)
         kwargs["api_key"] = api_key
 
     if provider == "anthropic":
         if not kwargs.get("base_url", ""):
-            base_url = "https://api.anthropic.com"
+            base_url = env_manager.get_endpoint(provider) or "https://api.anthropic.com"
         else:
             base_url = kwargs.get("base_url")
 
@@ -147,13 +208,9 @@ def get_llm_model(provider: str, **kwargs):
         )
     elif provider == "mistral":
         if not kwargs.get("base_url", ""):
-            base_url = os.getenv("MISTRAL_ENDPOINT", "https://api.mistral.ai/v1")
+            base_url = env_manager.get_endpoint(provider) or "https://api.mistral.ai/v1"
         else:
             base_url = kwargs.get("base_url")
-        if not kwargs.get("api_key", ""):
-            api_key = os.getenv("MISTRAL_API_KEY", "")
-        else:
-            api_key = kwargs.get("api_key")
 
         return ChatMistralAI(
             model=kwargs.get("model_name", "mistral-large-latest"),
@@ -163,7 +220,7 @@ def get_llm_model(provider: str, **kwargs):
         )
     elif provider == "openai":
         if not kwargs.get("base_url", ""):
-            base_url = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1")
+            base_url = env_manager.get_endpoint(provider) or "https://api.openai.com/v1"
         else:
             base_url = kwargs.get("base_url")
 
@@ -206,11 +263,7 @@ def get_llm_model(provider: str, **kwargs):
                 api_key=api_key,
             )
     elif provider == "google":
-        return ChatGoogleGenerativeAI(
-            model=kwargs.get("model_name", "gemini-2.0-flash-exp"),
-            temperature=kwargs.get("temperature", 0.0),
-            api_key=api_key,
-        )
+        return _create_google_provider(**kwargs)
     elif provider == "ollama":
         if not kwargs.get("base_url", ""):
             base_url = os.getenv("OLLAMA_ENDPOINT", "http://localhost:11434")

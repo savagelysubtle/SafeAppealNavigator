@@ -3,6 +3,62 @@ revision = 1
 requires-python = ">=3.13"
 
 [[package]]
+name = "ai-research-assistant"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "asyncio" },
+    { name = "browser-use", extra = ["memory"] },
+    { name = "gradio" },
+    { name = "httpx" },
+    { name = "json-repair" },
+    { name = "langchain-community" },
+    { name = "langchain-google-genai" },
+    { name = "langchain-ibm" },
+    { name = "langchain-mcp-adapters" },
+    { name = "langchain-mistralai" },
+    { name = "langgraph" },
+    { name = "maincontentextractor" },
+    { name = "mcp", extra = ["cli"] },
+    { name = "nest-asyncio" },
+    { name = "pydantic" },
+    { name = "pypdf2" },
+    { name = "pyperclip" },
+    { name = "python-dotenv" },
+    { name = "streamlit" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncio", specifier = ">=3.4.3" },
+    { name = "browser-use", extras = ["memory"], specifier = "==0.1.48" },
+    { name = "gradio", specifier = "==5.27.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "json-repair", specifier = ">=0.46.0" },
+    { name = "langchain-community", specifier = ">=0.3.20" },
+    { name = "langchain-google-genai", specifier = ">=2.1.2" },
+    { name = "langchain-ibm", specifier = "==0.3.10" },
+    { name = "langchain-mcp-adapters", specifier = "==0.0.9" },
+    { name = "langchain-mistralai", specifier = "==0.2.4" },
+    { name = "langgraph", specifier = "==0.3.34" },
+    { name = "maincontentextractor", specifier = "==0.0.4" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.6.0" },
+    { name = "nest-asyncio", specifier = ">=1.6.0" },
+    { name = "pydantic", specifier = ">=2.10.6" },
+    { name = "pypdf2", specifier = ">=3.0.1" },
+    { name = "pyperclip", specifier = "==1.9.0" },
+    { name = "python-dotenv", specifier = ">=1.1.0" },
+    { name = "streamlit", specifier = ">=1.45.1" },
+    { name = "ty", marker = "extra == 'dev'", specifier = "<=0.0.1a6" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "aiofiles"
 version = "24.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -286,52 +342,6 @@ wheels = [
 memory = [
     { name = "sentence-transformers" },
 ]
-
-[[package]]
-name = "browser-use-web-ui"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "asyncio" },
-    { name = "browser-use", extra = ["memory"] },
-    { name = "gradio" },
-    { name = "json-repair" },
-    { name = "langchain-community" },
-    { name = "langchain-ibm" },
-    { name = "langchain-mcp-adapters" },
-    { name = "langchain-mistralai" },
-    { name = "langgraph" },
-    { name = "maincontentextractor" },
-    { name = "nest-asyncio" },
-    { name = "pypdf2" },
-    { name = "pyperclip" },
-    { name = "streamlit" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "ty" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "asyncio", specifier = ">=3.4.3" },
-    { name = "browser-use", extras = ["memory"], specifier = "==0.1.48" },
-    { name = "gradio", specifier = "==5.27.0" },
-    { name = "json-repair", specifier = ">=0.46.0" },
-    { name = "langchain-community", specifier = ">=0.3.20" },
-    { name = "langchain-ibm", specifier = "==0.3.10" },
-    { name = "langchain-mcp-adapters", specifier = "==0.0.9" },
-    { name = "langchain-mistralai", specifier = "==0.2.4" },
-    { name = "langgraph", specifier = "==0.3.34" },
-    { name = "maincontentextractor", specifier = "==0.0.4" },
-    { name = "nest-asyncio", specifier = ">=1.6.0" },
-    { name = "pypdf2", specifier = ">=3.0.1" },
-    { name = "pyperclip", specifier = "==1.9.0" },
-    { name = "streamlit", specifier = ">=1.45.1" },
-    { name = "ty", marker = "extra == 'dev'", specifier = "<=0.0.1a6" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "cachetools"
@@ -1565,6 +1575,12 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/95/d2/f587cb965a56e992634bebc8611c5b579af912b74e04eb9164bd49527d21/mcp-1.6.0.tar.gz", hash = "sha256:d9324876de2c5637369f43161cd71eebfd803df5a95e46225cab8d280e366723", size = 200031 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/30/20a7f33b0b884a9d14dd3aa94ff1ac9da1479fe2ad66dd9e2736075d2506/mcp-1.6.0-py3-none-any.whl", hash = "sha256:7bd24c6ea042dbec44c754f100984d186620d8b841ec30f1b19eda9b93a634d0", size = 76077 },
+]
+
+[package.optional-dependencies]
+cli = [
+    { name = "python-dotenv" },
+    { name = "typer" },
 ]
 
 [[package]]

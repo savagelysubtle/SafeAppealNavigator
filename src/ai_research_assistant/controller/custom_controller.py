@@ -11,7 +11,7 @@ from browser_use.utils import time_execution_sync
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
 
-from src.browser_use_web_ui.utils.mcp_client import (
+from ..utils.mcp_client import (
     create_tool_param_model,
     setup_mcp_client_and_tools,
 )
