@@ -1,0 +1,43 @@
+[project]
+authors = [
+    { name = "SavagelySubtle", email = "your-email@example.com" },
+]
+dependencies = [
+    "asyncio>=3.4.3",
+    "browser-use[memory]==0.1.48",
+    "gradio==5.27.0",
+    "json-repair>=0.46.0",
+    "langchain-community>=0.3.20",
+    "langchain-ibm==0.3.10",
+    "langchain-mcp-adapters==0.0.9",
+    "langchain-mistralai==0.2.4",
+    "langgraph==0.3.34",
+    "maincontentextractor==0.0.4",
+    "nest-asyncio>=1.6.0",
+    "pypdf2>=3.0.1",
+    "pyperclip==1.9.0",
+    "streamlit>=1.45.1",
+]
+description = "Enhanced AI Research Assistant with advanced legal research capabilities, multi-LLM support, and intelligent document generation"
+license = { text = "Apache-2.0" }
+name = "ai-research-assistant"
+readme = "README.md"
+requires-python = ">=3.13"
+version = "1.0.0"
+
+    [project.optional-dependencies]
+    dev = [
+        "ty<=0.0.1a6",
+    ]
+
+[build-system]
+build-backend = "uv_build"
+requires      = [ "uv-build>=0.6.0,<0.7" ]
+
+
+[tool.ruff]
+exclude     = [ "**/node_modules", ".venv", "__pycache__" ]
+line-length = 88
+
+[tool.ty.src]
+root = "./src"
