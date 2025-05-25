@@ -144,12 +144,14 @@ async def run_intake_workflow(
         if workflow_type == "enhanced_legal":
             agent = EnhancedLegalIntakeAgent(
                 case_organization_directory=output_directory,
+                global_settings_manager=webui_manager.global_settings_manager,
             )
             logger.info("✅ Enhanced Legal Intake Agent initialized successfully")
         else:
             agent = IntakeAgent(
                 intake_directory=source_directory,
                 processed_directory=output_directory,
+                global_settings_manager=webui_manager.global_settings_manager,
             )
             logger.info("✅ Basic Intake Agent initialized successfully")
 

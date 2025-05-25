@@ -784,6 +784,16 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         # Analyze processed documents to create search strategies
         search_points = []
 
+        # Ensure we have a valid case ID before proceeding
+        if not self.current_case_id:
+            logger.warning("⚠️ No current case ID set for search point generation")
+            return {
+                "success": False,
+                "error": "No current case ID available for search point generation",
+                "search_points_generated": 0,
+                "search_points": [],
+            }
+
         # Generate search points based on case documents
         for file_path in self.current_case_files:
             try:
@@ -1086,12 +1096,35 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         }
 
     async def _get_llm_instance(self):
-        """Get LLM instance from the unified factory."""
+        """Get LLM instance from the unified factory using global settings."""
         try:
             from ...utils.unified_llm_factory import get_llm_factory
 
             factory = get_llm_factory()
-            return factory.create_llm_for_legal_agent("openai", "gpt-4")
+
+            # Use global settings manager if available
+            if (
+                hasattr(self, "global_settings_manager")
+                and self.global_settings_manager
+            ):
+                # Get primary LLM configuration from global settings
+                llm_config = self.global_settings_manager.get_primary_llm_config()
+                provider = llm_config.get("provider", "google")
+                model_name = llm_config.get(
+                    "model_name", "gemini-2.5-flash-preview-04-17"
+                )
+
+                logger.info(
+                    f"🤖 Using LLM from global settings: {provider} - {model_name}"
+                )
+                return factory.create_llm_for_legal_agent(provider, model_name)
+            else:
+                # Fallback to default settings if no global settings manager
+                logger.warning(
+                    "⚠️ No global settings manager found, using default OpenAI configuration"
+                )
+                return factory.create_llm_for_legal_agent("openai", "gpt-4")
+
         except Exception as e:
             logger.warning(f"Could not get LLM instance: {e}")
             return None
