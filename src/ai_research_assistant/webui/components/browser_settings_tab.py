@@ -3,7 +3,7 @@ import os
 
 import gradio as gr
 
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 

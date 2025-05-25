@@ -18,22 +18,85 @@ from datetime import datetime
 
 import gradio as gr
 
-from src.browser_use_web_ui.agent.legal_research import (
+from src.ai_research_assistant.agent.legal_research import (
     LegalCaseDatabase,
 )
-from src.browser_use_web_ui.agent.legal_research.enhanced_legal_features import (
+from src.ai_research_assistant.agent.legal_research.enhanced_legal_features import (
     EnhancedLegalAnalyzer,
     LegalDocumentGenerator,
     MultiJurisdictionalResearcher,
     create_enhanced_legal_workflow,
 )
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.utils.unified_llm_factory import UnifiedLLMFactory
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 
 # Global state management
 _LEGAL_RESEARCH_TASKS = {}
 _LEGAL_RESEARCH_STOP_FLAGS = {}
+
+
+def _get_llm_from_global_settings(
+    webui_manager: WebuiManager, llm_type: str = "primary"
+):
+    """
+    Get LLM instance from global settings manager.
+    This function provides a unified way to access LLMs across all components.
+    """
+    try:
+        if (
+            hasattr(webui_manager, "global_settings_manager")
+            and webui_manager.global_settings_manager
+        ):
+            factory = UnifiedLLMFactory()
+            llm = factory.create_llm_from_global_settings(
+                webui_manager.global_settings_manager, llm_type=llm_type
+            )
+            if llm:
+                logger.info(f"✅ Using global settings for {llm_type} LLM")
+                return llm
+
+        logger.warning("Global settings manager not available")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get LLM from global settings: {e}")
+        return None
+
+
+def _get_llm_from_legacy_settings(
+    webui_manager: WebuiManager,
+    llm_provider_val: str,
+    llm_temp: float,
+):
+    """
+    Fallback to legacy LLM initialization for backward compatibility.
+    This ensures the component continues working during the migration period.
+    """
+    try:
+        from src.ai_research_assistant.utils.llm_provider import get_llm_model
+
+        logger.info(
+            f"Using legacy LLM settings: provider={llm_provider_val}, temp={llm_temp}"
+        )
+
+        llm = get_llm_model(
+            provider=llm_provider_val,
+            temperature=llm_temp,
+            max_tokens=4096,  # Good for legal analysis
+        )
+
+        if llm:
+            logger.info(f"✅ Created LLM using legacy settings: {llm_provider_val}")
+            return llm
+        else:
+            raise RuntimeError(
+                f"Failed to create LLM with provider '{llm_provider_val}'"
+            )
+
+    except Exception as e:
+        logger.error(f"Legacy LLM initialization failed: {e}")
+        raise RuntimeError(f"Failed to initialize LLM: {e}")
 
 
 def create_legal_research_tab(ui_manager: WebuiManager) -> None:
@@ -120,21 +183,32 @@ def create_legal_research_tab(ui_manager: WebuiManager) -> None:
             with gr.Tab("🎛️ Advanced Options"):
                 with gr.Row():
                     with gr.Column():
+                        # Note: LLM configuration moved to Global Settings panel
                         gr.Markdown("### 🤖 LLM Configuration")
-                        llm_provider = gr.Dropdown(
-                            choices=["openai", "anthropic", "google"],
-                            value="openai",
-                            label="LLM Provider",
-                            info="Choose AI model for analysis",
-                        )
-                        llm_temperature = gr.Slider(
-                            minimum=0.0,
-                            maximum=1.0,
-                            value=0.1,
-                            step=0.1,
-                            label="Analysis Temperature",
-                            info="Lower = more focused analysis",
-                        )
+                        gr.Markdown("""
+                        **ℹ️ LLM settings are now managed in the Global Settings panel above.**
+
+                        Configure your AI model preferences there for optimal legal analysis.
+                        """)
+
+                        # Legacy LLM configuration (hidden by default, for fallback compatibility)
+                        with gr.Accordion(
+                            "🔧 Legacy LLM Override (Advanced)", open=False
+                        ):
+                            llm_provider = gr.Dropdown(
+                                choices=["openai", "anthropic", "google"],
+                                value="openai",
+                                label="LLM Provider Override",
+                                info="Override global LLM settings for this session only",
+                            )
+                            llm_temperature = gr.Slider(
+                                minimum=0.0,
+                                maximum=1.0,
+                                value=0.1,
+                                step=0.1,
+                                label="Analysis Temperature Override",
+                                info="Lower = more focused analysis",
+                            )
 
                     with gr.Column():
                         gr.Markdown("### 📋 Document Generation")
@@ -362,9 +436,29 @@ def create_legal_research_tab(ui_manager: WebuiManager) -> None:
         def run_enhanced_research():
             """Run enhanced research in a separate thread"""
             try:
-                # Initialize enhanced components
+                # Initialize LLM using global settings first, then fallback to legacy
+                llm = None
                 if enable_llm:
-                    analyzer = EnhancedLegalAnalyzer(llm_provider_val)
+                    llm = _get_llm_from_global_settings(ui_manager, "primary")
+                    if not llm:
+                        logger.info(
+                            "Global settings not available, using legacy LLM settings"
+                        )
+                        llm = _get_llm_from_legacy_settings(
+                            ui_manager, llm_provider_val, llm_temp
+                        )
+
+                # Initialize enhanced components
+                analyzer = None
+                if enable_llm:
+                    # Create analyzer with proper LLM instance and global settings support
+                    analyzer = EnhancedLegalAnalyzer(
+                        llm_instance=llm,  # Pass the actual LLM instance
+                        llm_provider=llm_provider_val,
+                        global_settings_manager=getattr(
+                            ui_manager, "global_settings_manager", None
+                        ),
+                    )
 
                 if auto_gen_docs:
                     doc_generator = LegalDocumentGenerator()

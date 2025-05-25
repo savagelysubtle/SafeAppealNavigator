@@ -5,12 +5,17 @@ from typing import Any, AsyncGenerator, Dict, Optional
 
 import gradio as gr
 from gradio.components import Component
+from langchain_core.language_models.chat_models import BaseChatModel
 
-from src.browser_use_web_ui.agent.deep_research.deep_research_agent import (
+from src.ai_research_assistant.agent.deep_research.deep_research_agent import (
     DeepResearchAgent,
 )
-from src.browser_use_web_ui.utils import llm_provider
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.utils import llm_provider
+from src.ai_research_assistant.utils.unified_llm_factory import (
+    UnifiedLLMFactory,
+    create_llm_from_settings,
+)
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 
@@ -155,14 +160,19 @@ async def run_deep_research(
         llm_api_key = get_setting("agent_settings", "llm_api_key")
         ollama_num_ctx = get_setting("agent_settings", "ollama_num_ctx")
 
-        llm = await _initialize_llm(
-            llm_provider_name,
-            llm_model_name,
-            llm_temperature,
-            llm_base_url,
-            llm_api_key,
-            ollama_num_ctx if llm_provider_name == "ollama" else None,
-        )
+        # Try global settings first, then fallback to legacy component settings
+        llm = _get_llm_from_global_settings(webui_manager, "primary")
+        if not llm:
+            llm = _get_llm_from_legacy_settings(
+                webui_manager,
+                components,
+                llm_provider_name,
+                llm_model_name,
+                llm_temperature,
+                llm_base_url,
+                llm_api_key,
+                ollama_num_ctx,
+            )
         if not llm:
             raise ValueError("LLM Initialization failed. Please check Agent Settings.")
 
@@ -618,3 +628,59 @@ def create_deep_research_agent_tab(webui_manager: WebuiManager):
     stop_button.click(
         fn=stop_wrapper, inputs=None, outputs=list(tab_components.values())
     )
+
+
+def _get_llm_from_global_settings(
+    webui_manager: WebuiManager, llm_type: str = "primary"
+) -> Optional[BaseChatModel]:
+    """Get LLM instance from global settings manager"""
+    if (
+        not hasattr(webui_manager, "global_settings_manager")
+        or not webui_manager.global_settings_manager
+    ):
+        logger.warning(
+            "Global settings manager not available, falling back to legacy method"
+        )
+        return None
+
+    try:
+        llm = create_llm_from_settings(webui_manager.global_settings_manager, llm_type)
+        logger.info(f"✅ Successfully created {llm_type} LLM from global settings")
+        return llm
+    except Exception as e:
+        logger.error(f"Failed to create {llm_type} LLM from global settings: {e}")
+        return None
+
+
+def _get_llm_from_legacy_settings(
+    webui_manager: WebuiManager,
+    components: Dict[Component, Any],
+    llm_provider_name: Optional[str],
+    llm_model_name: Optional[str],
+    llm_temperature: float,
+    llm_base_url: Optional[str],
+    llm_api_key: Optional[str],
+    ollama_num_ctx: Optional[int] = None,
+) -> Optional[BaseChatModel]:
+    """Fallback method using legacy component-based settings"""
+    if not llm_provider_name or not llm_model_name:
+        logger.info("LLM Provider or Model Name not specified, LLM will be None.")
+        return None
+
+    try:
+        factory = UnifiedLLMFactory()
+        llm = factory.create_llm_for_research_agent(
+            provider=llm_provider_name,
+            model_name=llm_model_name,
+            temperature=llm_temperature,
+        )
+        logger.info(
+            f"✅ Successfully created LLM from legacy settings: {llm_provider_name}:{llm_model_name}"
+        )
+        return llm
+    except Exception as e:
+        logger.error(f"Failed to create LLM from legacy settings: {e}")
+        gr.Warning(
+            f"Failed to initialize LLM '{llm_model_name}' for provider '{llm_provider_name}'. Error: {e}"
+        )
+        return None

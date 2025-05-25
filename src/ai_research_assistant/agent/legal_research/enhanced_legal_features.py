@@ -10,90 +10,112 @@ This module provides advanced features for legal case research:
 """
 
 import logging
-import os
 import re
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ...utils.unified_llm_factory import UnifiedLLMFactory
+
 logger = logging.getLogger(__name__)
 
 
 class EnhancedLegalAnalyzer:
     """
-    Enhanced legal analysis using LLM integration for deeper case insights
+    Enhanced legal analysis using unified LLM integration for deeper case insights
     """
 
-    def __init__(self, llm_provider: str = "openai"):
+    def __init__(
+        self,
+        llm_instance=None,
+        llm_provider: str = "google",
+        global_settings_manager=None,
+    ):
+        """Initialize with a pre-configured LLM instance or create one from provider/settings"""
+        self.llm_instance = llm_instance
         self.llm_provider = llm_provider
-        self._init_llm_client()
+        self.global_settings_manager = global_settings_manager
 
-    def _init_llm_client(self):
-        """Initialize LLM client based on provider"""
-        if self.llm_provider == "openai":
+        # If no LLM instance provided, create one using unified factory
+        if not self.llm_instance:
             try:
-                import openai
+                self.llm_instance = self._initialize_llm()
+                if self.llm_instance:
+                    logger.info(
+                        f"✅ Successfully initialized LLM for EnhancedLegalAnalyzer using {self.llm_provider}"
+                    )
+                else:
+                    logger.warning(
+                        "Failed to initialize LLM instance for EnhancedLegalAnalyzer"
+                    )
+            except Exception as e:
+                logger.error(f"Error initializing LLM for EnhancedLegalAnalyzer: {e}")
+                self.llm_instance = None
 
-                self.client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            except ImportError:
-                logger.error("OpenAI package not installed")
-                self.client = None
-        elif self.llm_provider == "anthropic":
-            try:
-                import anthropic
+    def _initialize_llm(self):
+        """Initialize LLM using unified factory with global settings support"""
+        try:
+            factory = UnifiedLLMFactory()
 
-                self.client = anthropic.Anthropic(
-                    api_key=os.getenv("ANTHROPIC_API_KEY")
-                )
-            except ImportError:
-                logger.error("Anthropic package not installed")
-                self.client = None
+            # Try global settings first if available
+            if self.global_settings_manager:
+                try:
+                    llm = factory.create_llm_from_global_settings(
+                        self.global_settings_manager, "primary"
+                    )
+                    if llm:
+                        logger.info(
+                            "✅ Using global settings for EnhancedLegalAnalyzer LLM"
+                        )
+                        return llm
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to use global settings for EnhancedLegalAnalyzer LLM: {e}"
+                    )
+
+            # Fallback to provider-specific configuration
+            logger.info(
+                f"Using provider-specific LLM configuration for EnhancedLegalAnalyzer: {self.llm_provider}"
+            )
+
+            config = {
+                "provider": self.llm_provider,
+                "model_name": None,  # Will use default for provider
+                "temperature": 0.7,  # Good for legal analysis
+                "max_tokens": 2048,
+            }
+
+            return factory.create_llm_from_config(config)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to initialize LLM using unified factory for EnhancedLegalAnalyzer: {e}"
+            )
+            return None
 
     def generate_legal_strategy(
         self, user_case: Dict[str, Any], similar_cases: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Generate comprehensive legal strategy using LLM analysis
+        Generate comprehensive legal strategy using unified LLM analysis
         """
-        if not self.client:
-            return {"error": "LLM client not available"}
+        if not self.llm_instance:
+            return {"error": "LLM instance not available"}
 
         prompt = self._build_strategy_prompt(user_case, similar_cases)
 
         try:
-            strategy = ""
-            if self.llm_provider == "openai":
-                response = self.client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert legal strategist specializing in Workers' Compensation law.",
-                        },
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=0.1,
-                )
-                strategy = response.choices[0].message.content or ""
-            elif self.llm_provider == "anthropic":
-                response = self.client.messages.create(
-                    model="claude-3-sonnet-20240229",
-                    max_tokens=2000,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                if response.content and len(response.content) > 0:
-                    content_block = response.content[0]
-                    if (
-                        hasattr(content_block, "text")
-                        and hasattr(content_block, "type")
-                        and content_block.type == "text"
-                    ):
-                        strategy = content_block.text
-                    else:
-                        strategy = str(content_block)
-                else:
-                    strategy = ""
+            # Use the unified LLM interface (LangChain compatible)
+            response = self.llm_instance.invoke(prompt)
+
+            # Handle different response types
+            if hasattr(response, "content"):
+                strategy = response.content
+            elif isinstance(response, str):
+                strategy = response
+            else:
+                strategy = str(response)
 
             return self._parse_strategy_response(strategy)
 
@@ -105,7 +127,8 @@ class EnhancedLegalAnalyzer:
         self, user_case: Dict[str, Any], similar_cases: List[Dict[str, Any]]
     ) -> str:
         """Build comprehensive prompt for legal strategy generation"""
-        prompt = f"""
+        prompt = f"""You are an expert legal strategist specializing in Workers' Compensation law. Provide comprehensive legal analysis based on the case details and precedents below.
+
         LEGAL CASE ANALYSIS REQUEST
 
         USER'S CASE:
@@ -361,27 +384,54 @@ def create_enhanced_legal_workflow(
     """
     Create a complete enhanced legal workflow
     """
-    # Initialize enhanced components
-    analyzer = EnhancedLegalAnalyzer("openai")  # or "anthropic"
-    multi_researcher = MultiJurisdictionalResearcher()
-    doc_generator = LegalDocumentGenerator()
-
-    # Generate comprehensive strategy
-    strategy = analyzer.generate_legal_strategy(user_case, existing_cases)
-
-    # Search additional jurisdictions
-    additional_cases = multi_researcher.search_multiple_jurisdictions(
-        query=" ".join(user_case.get("keywords", [])),
-        jurisdictions=["bc_wcat", "canlii"],
-    )
-
-    # Generate appeal documents
-    appeal_notice = doc_generator.generate_appeal_notice(user_case)
-
-    return {
-        "enhanced_strategy": strategy,
-        "additional_cases": additional_cases,
-        "generated_documents": {"appeal_notice": appeal_notice},
+    workflow_results = {
         "workflow_id": str(uuid.uuid4()),
         "created_at": datetime.now().isoformat(),
+        "enhanced_strategy": None,
+        "additional_cases": {},
+        "generated_documents": {},
     }
+
+    try:
+        # Initialize enhanced components
+        analyzer = EnhancedLegalAnalyzer()
+        multi_researcher = MultiJurisdictionalResearcher()
+        doc_generator = LegalDocumentGenerator()
+
+        # Generate comprehensive strategy
+        if analyzer.llm_instance:
+            strategy = analyzer.generate_legal_strategy(user_case, existing_cases)
+            workflow_results["enhanced_strategy"] = strategy
+            logger.info("✅ Generated enhanced legal strategy")
+        else:
+            logger.warning("⚠️ LLM not available, skipping strategy generation")
+            workflow_results["enhanced_strategy"] = {
+                "error": "LLM not available for strategy generation"
+            }
+
+        # Search additional jurisdictions
+        try:
+            additional_cases = multi_researcher.search_multiple_jurisdictions(
+                query=" ".join(user_case.get("keywords", [])),
+                jurisdictions=["bc_wcat", "canlii"],
+            )
+            workflow_results["additional_cases"] = additional_cases
+            logger.info("✅ Completed multi-jurisdictional search")
+        except Exception as e:
+            logger.warning(f"Multi-jurisdictional search failed: {e}")
+            workflow_results["additional_cases"] = {"error": str(e)}
+
+        # Generate appeal documents
+        try:
+            appeal_notice = doc_generator.generate_appeal_notice(user_case)
+            workflow_results["generated_documents"] = {"appeal_notice": appeal_notice}
+            logger.info("✅ Generated legal documents")
+        except Exception as e:
+            logger.warning(f"Document generation failed: {e}")
+            workflow_results["generated_documents"] = {"error": str(e)}
+
+    except Exception as e:
+        logger.error(f"Enhanced legal workflow failed: {e}")
+        workflow_results["error"] = str(e)
+
+    return workflow_results

@@ -1,34 +1,30 @@
+"""
+Main WebUI Interface for AI Research Assistant
+
+Updated to include unified global settings panel that consolidates
+all LLM configurations previously scattered across multiple tabs.
+"""
+
 import gradio as gr
 import gradio.themes as themes
 
-from src.browser_use_web_ui.webui.components.agent_settings_tab import (
-    create_agent_settings_tab,
+from .components.agent_settings_tab import create_agent_settings_tab
+from .components.browser_launch_tab import create_browser_launch_tab
+from .components.browser_settings_tab import create_browser_settings_tab
+from .components.browser_use_agent_tab import create_browser_use_agent_tab
+from .components.collector_agent_tab import create_collector_agent_tab
+from .components.cross_reference_agent_tab import create_cross_reference_agent_tab
+from .components.database_maintenance_agent_tab import (
+    create_database_maintenance_agent_tab,
 )
-from src.browser_use_web_ui.webui.components.browser_launch_tab import (
-    create_browser_launch_tab,
-)
-from src.browser_use_web_ui.webui.components.browser_settings_tab import (
-    create_browser_settings_tab,
-)
-from src.browser_use_web_ui.webui.components.browser_use_agent_tab import (
-    create_browser_use_agent_tab,
-)
-from src.browser_use_web_ui.webui.components.collector_agent_tab import (
-    create_collector_agent_tab,
-)
-from src.browser_use_web_ui.webui.components.deep_research_agent_tab import (
-    create_deep_research_agent_tab,
-)
-from src.browser_use_web_ui.webui.components.legal_research_tab import (
-    create_legal_research_tab,
-)
-from src.browser_use_web_ui.webui.components.load_save_config_tab import (
-    create_load_save_config_tab,
-)
-from src.browser_use_web_ui.webui.components.mcp_server_tab import (
-    create_mcp_server_tab,
-)
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from .components.deep_research_agent_tab import create_deep_research_agent_tab
+from .components.global_settings_panel import create_global_settings_panel
+from .components.intake_agent_tab import create_intake_agent_tab
+from .components.legal_research_tab import create_legal_research_tab
+from .components.load_save_config_tab import create_load_save_config_tab
+from .components.mcp_server_tab import create_mcp_server_tab
+from .components.search_agent_tab import create_search_agent_tab
+from .webui_manager import WebuiManager
 
 theme_map = {
     "Default": themes.Default(),
@@ -43,83 +39,179 @@ theme_map = {
 
 
 def create_ui(theme_name="Ocean"):
-    css = """
-    .gradio-container {
-        width: 70vw !important;
-        max-width: 70% !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        padding-top: 10px !important;
-    }
-    .header-text {
-        text-align: center;
-        margin-bottom: 20px;
-    }
-    .tab-header-text {
-        text-align: center;
-    }
-    .theme-section {
-        margin-bottom: 10px;
-        padding: 15px;
-        border-radius: 10px;
-    }
     """
+    Create the main WebUI interface with unified global settings.
 
-    # dark mode in default
-    js_func = """
-    function refresh() {
-        const url = new URL(window.location);
-
-        if (url.searchParams.get('__theme') !== 'dark') {
-            url.searchParams.set('__theme', 'dark');
-            window.location.href = url.href;
-        }
-    }
+    The interface now features:
+    1. Global Settings Panel (collapsible) - at the top for easy access
+    2. All agent tabs below - simplified without duplicate LLM settings
     """
+    # Initialize WebUI Manager
+    webui_manager = WebuiManager()
 
-    ui_manager = WebuiManager()
-
+    # Create the main interface
     with gr.Blocks(
-        title="Browser Use WebUI",
-        theme=theme_map[theme_name],
-        css=css,
-        js=js_func,
+        theme=theme_name,
+        title="🧠 AI Research Assistant - Unified Settings",
+        css="""
+        .global-settings-panel {
+            border: 2px solid #4a90e2;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+        .agent-tabs {
+            margin-top: 10px;
+        }
+        .status-indicator {
+            font-weight: bold;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        """,
     ) as demo:
-        with gr.Row():
-            gr.Markdown(
-                """
-                # 🌐 Browser Use WebUI
-                ### Control your browser with AI assistance
-                """,
-                elem_classes=["header-text"],
+        # Header
+        gr.Markdown("""
+        # 🧠 AI Research Assistant
+        ### Advanced WC-AT case research with AI-powered analysis and document generation
+
+        **🌟 Phase 4 Complete:** All specialized agents now available - Intake, Search, Cross Reference, and Database Maintenance
+        **🌟 Unified Settings:** All LLM and system configurations are managed in the Global Settings panel below.
+        """)
+
+        # Global Settings Panel (always visible at top)
+        with gr.Group(elem_classes="global-settings-panel"):
+            gr.Markdown("## 🌐 Unified Configuration Center")
+            global_settings_components, settings_manager = create_global_settings_panel(
+                webui_manager
             )
 
-        with gr.Tabs():
-            with gr.TabItem("⚙️ Agent Settings"):
-                create_agent_settings_tab(ui_manager)
+        # Agent Tabs (simplified without duplicate settings)
+        with gr.Tabs(elem_classes="agent-tabs") as main_tabs:
+            # Browser Use Agent Tab
+            with gr.TabItem("🌐 Browser Agent"):
+                gr.Markdown("""
+                **Browser automation with AI guidance**
+                *LLM settings managed in Global Settings panel above*
+                """)
+                create_browser_use_agent_tab(webui_manager)
 
-            with gr.TabItem("🌐 Browser Settings"):
-                create_browser_settings_tab(ui_manager)
-
-            with gr.TabItem("🧪 Browser Launch"):
-                create_browser_launch_tab(ui_manager)
-
-            with gr.TabItem("🤖 Run Agent"):
-                create_browser_use_agent_tab(ui_manager)
-
-            with gr.TabItem("🗄️ MCP Server"):
-                create_mcp_server_tab(ui_manager)
-
+            # Deep Research Agent Tab
             with gr.TabItem("🔍 Deep Research"):
-                create_deep_research_agent_tab(ui_manager)
+                gr.Markdown("""
+                **Comprehensive research with parallel processing**
+                *LLM settings managed in Global Settings panel above*
+                """)
+                create_deep_research_agent_tab(webui_manager)
 
+            # Legal Research Tab
             with gr.TabItem("⚖️ Legal Research"):
-                create_legal_research_tab(ui_manager)
+                gr.Markdown("""
+                **WC-AT case research and legal analysis**
+                *LLM settings managed in Global Settings panel above*
+                """)
+                create_legal_research_tab(webui_manager)
 
-            with gr.TabItem("📊 PDF Collector"):
-                create_collector_agent_tab(ui_manager)
+            # Collector Agent Tab
+            with gr.TabItem("📊 Data Collector"):
+                gr.Markdown("""
+                **Automated data collection and organization**
+                *LLM settings managed in Global Settings panel above*
+                """)
+                create_collector_agent_tab(webui_manager)
 
-            with gr.TabItem("📁 Load & Save Config"):
-                create_load_save_config_tab(ui_manager)
+            # Phase 4 Agents - New Specialized Workflow Agents
+            with gr.TabItem("📥 Intake Agent"):
+                gr.Markdown("""
+                **Document intake and organization workflows**
+                *Enhanced Legal Intake for WCB case processing*
+                """)
+                create_intake_agent_tab(webui_manager)
+
+            with gr.TabItem("🔍 Search Agent"):
+                gr.Markdown("""
+                **Advanced search across multiple data sources**
+                *Semantic search and legal precedent discovery*
+                """)
+                create_search_agent_tab(webui_manager)
+
+            with gr.TabItem("🔗 Cross Reference"):
+                gr.Markdown("""
+                **Intelligent cross-referencing and relationship analysis**
+                *Document correlation and case relationship mapping*
+                """)
+                create_cross_reference_agent_tab(webui_manager)
+
+            with gr.TabItem("🔧 Database Maintenance"):
+                gr.Markdown("""
+                **System optimization and database health monitoring**
+                *Automated maintenance and performance analytics*
+                """)
+                create_database_maintenance_agent_tab(webui_manager)
+
+            # Configuration Management
+            with gr.TabItem("⚙️ Config Management"):
+                gr.Markdown("""
+                **Load, save, and manage configurations**
+                *Works with Global Settings above*
+                """)
+                create_load_save_config_tab(webui_manager)
+
+            # Advanced Settings (kept for specialized configs)
+            with gr.TabItem("🔧 Advanced Settings"):
+                with gr.Accordion("Legacy Agent Settings", open=False):
+                    gr.Markdown(
+                        "⚠️ **Deprecated:** Use Global Settings panel above instead"
+                    )
+                    create_agent_settings_tab(webui_manager)
+
+                with gr.Accordion("Browser Settings", open=True):
+                    create_browser_settings_tab(webui_manager)
+
+                with gr.Accordion("MCP Server Settings", open=False):
+                    create_mcp_server_tab(webui_manager)
+
+            # System Tools
+            with gr.TabItem("🚀 System Tools"):
+                gr.Markdown("""
+                **System utilities and browser management**
+                """)
+                create_browser_launch_tab(webui_manager)
+
+        # Status Footer
+        with gr.Row():
+            with gr.Column(scale=2):
+                gr.Markdown("""
+                **💡 Tips:**
+                - Configure all LLM settings in the Global Settings panel above
+                - Settings automatically sync to all agents
+                - Use Config Management tab to save/load your preferred setups
+                - **Phase 4 Agents:** Use Intake → Search → Cross Reference → Database Maintenance for complete workflows
+                - Enhanced Legal Intake automates WCB case file organization and analysis
+                """)
+
+            with gr.Column(scale=1):
+                global_status = gr.Textbox(
+                    label="🌐 Global Status",
+                    value="✅ Unified settings system active",
+                    interactive=False,
+                    elem_classes="status-indicator status-success",
+                )
+
+        # Store global status component for updates
+        webui_manager.add_components("global_status", {"status": global_status})
 
     return demo

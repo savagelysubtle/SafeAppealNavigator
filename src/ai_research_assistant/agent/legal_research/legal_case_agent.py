@@ -96,14 +96,16 @@ class LegalCaseResearchAgent:
         task_id: Optional[str] = None,
         db_path: Optional[str] = None,
         enable_llm_analysis: bool = True,
-        llm_provider: str = "openai",
+        llm_provider: str = "google",
         enable_document_generation: bool = True,
         enable_multi_jurisdictional: bool = False,
+        global_settings_manager=None,
     ):
         self.browser = browser
         self.context = context
         self.download_dir = Path(download_dir)
         self.task_id = task_id or str(uuid.uuid4())
+        self.global_settings_manager = global_settings_manager
 
         # Initialize database with environment variable support
         if db_path is None:
@@ -118,6 +120,7 @@ class LegalCaseResearchAgent:
         self.enable_llm_analysis = enable_llm_analysis
         self.enable_document_generation = enable_document_generation
         self.enable_multi_jurisdictional = enable_multi_jurisdictional
+        self.llm_provider = llm_provider
 
         # Initialize enhanced components
         self.legal_analyzer = None
@@ -127,9 +130,14 @@ class LegalCaseResearchAgent:
 
         if self.enable_llm_analysis:
             try:
-                self.legal_analyzer = EnhancedLegalAnalyzer(llm_provider)
+                # Create EnhancedLegalAnalyzer with proper LLM initialization
+                self.legal_analyzer = EnhancedLegalAnalyzer(
+                    llm_instance=None,  # Let it create its own
+                    llm_provider=self.llm_provider,
+                    global_settings_manager=self.global_settings_manager,
+                )
                 logger.info(
-                    f"[LegalAgent {self.task_id}] Initialized LLM analyzer with {llm_provider}"
+                    f"[LegalAgent {self.task_id}] Initialized LLM analyzer with {self.llm_provider}"
                 )
             except Exception as e:
                 logger.warning(
@@ -1080,6 +1088,7 @@ async def run_legal_research_task(
     date_range: Optional[Dict[str, str]] = None,
     max_cases_per_query: int = 20,
     download_dir: str = "./tmp/legal_research",
+    global_settings_manager=None,
 ) -> Dict[str, Any]:
     """
     Run a single legal research task with proper browser management.
@@ -1089,9 +1098,13 @@ async def run_legal_research_task(
         browser = CustomBrowser()
         context = await browser.new_context()
 
-        # Create legal research agent
+        # Create legal research agent with global settings support
         agent = LegalCaseResearchAgent(
-            browser=browser, context=context, download_dir=download_dir, task_id=task_id
+            browser=browser,
+            context=context,
+            download_dir=download_dir,
+            task_id=task_id,
+            global_settings_manager=global_settings_manager,
         )
 
         # Run research

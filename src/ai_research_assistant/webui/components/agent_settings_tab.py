@@ -1,38 +1,93 @@
 import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import gradio as gr
 
-from src.browser_use_web_ui.utils import config
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.utils import config
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
+
+# Create model_names mapping from available config
+model_names = {
+    provider: [model_config["model"]]
+    for provider, model_config in config.DEFAULT_MODELS.items()
+}
 
 
 def update_model_dropdown(llm_provider):
     """
     Update the model name dropdown with predefined models for the selected provider.
+    For Google, shows all available Gemini models organized by categories.
     """
-    # Use predefined models for the selected provider
-    if llm_provider in config.model_names:
+    if llm_provider == "google":
+        # Get all Google models organized by category
+        all_models = []
+        categories = config.get_google_models_by_category()
+
+        # Create choices with format: (display_name, actual_model_id)
+        for category, models in categories.items():
+            for model in models:
+                model_info = config.GOOGLE_MODEL_OPTIONS.get(model, {})
+                display_name = f"[{category.split('(')[0].strip()}] {model_info.get('name', model)}"
+                all_models.append((display_name, model))
+
+        # Add non-categorized models if any
+        for model_id in config.GOOGLE_MODEL_OPTIONS.keys():
+            if not any(
+                model_id in category_models for category_models in categories.values()
+            ):
+                model_info = config.GOOGLE_MODEL_OPTIONS.get(model_id, {})
+                display_name = f"[Other] {model_info.get('name', model_id)}"
+                all_models.append((display_name, model_id))
+
+        # Sort models by display name
+        all_models.sort(key=lambda x: x[0])
+
+        # Get recommended default
+        recommended = config.get_recommended_google_models()
+        default_model = recommended.get("general_use", "gemini-2.5-flash-preview-04-17")
+
         return gr.Dropdown(
-            choices=config.model_names[llm_provider],
-            value=config.model_names[llm_provider][0],
+            choices=all_models,
+            value=default_model,
             interactive=True,
+            allow_custom_value=True,
+            info="All available Google Gemini models organized by capability - WARNING: This tab is deprecated, use Global Settings instead",
+        )
+    # Use predefined models for the selected provider
+    elif llm_provider in config.DEFAULT_MODELS:
+        model_config = config.DEFAULT_MODELS[llm_provider]
+        return gr.Dropdown(
+            choices=[model_config["model"]],
+            value=model_config["model"],
+            interactive=True,
+            allow_custom_value=True,
+            info=f"Default {llm_provider} model - WARNING: This tab is deprecated, use Global Settings instead",
         )
     else:
         return gr.Dropdown(
-            choices=[], value="", interactive=True, allow_custom_value=True
+            choices=[],
+            value="",
+            interactive=True,
+            allow_custom_value=True,
+            info="No predefined models for this provider - WARNING: This tab is deprecated, use Global Settings instead",
         )
 
 
-async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
+async def update_mcp_server(
+    mcp_file: str, webui_manager: Optional[WebuiManager] = None
+):
     """
-    Update the MCP server.
+    Update the MCP server configuration.
     """
-    if hasattr(webui_manager, "bu_controller") and webui_manager.bu_controller:
+    if (
+        webui_manager
+        and hasattr(webui_manager, "bu_controller")
+        and webui_manager.bu_controller
+    ):
         logger.warning("⚠️ Close controller because mcp file has changed!")
         await webui_manager.bu_controller.close_mcp_client()
         webui_manager.bu_controller = None
@@ -43,6 +98,10 @@ async def update_mcp_server(mcp_file: str, webui_manager: WebuiManager):
 
     with open(mcp_file, "r") as f:
         mcp_server = json.load(f)
+
+    # Update the webui manager's MCP configuration
+    if webui_manager:
+        webui_manager.mcp_server_config = mcp_server
 
     return json.dumps(mcp_server, indent=2), gr.update(visible=True)
 
@@ -87,17 +146,41 @@ def load_preset_config(preset_name: str) -> Dict[str, Any]:
     return presets.get(preset_name, {})
 
 
-def create_agent_settings_tab(webui_manager: WebuiManager):
+def create_agent_settings_tab(webui_manager: Optional[WebuiManager] = None):
     """
     Creates an enhanced agent settings tab with better organization and presets.
+
+    **DEPRECATION NOTICE**: This tab is being deprecated in favor of the Global Settings panel.
+    Please use the Global Settings panel above for configuring LLM providers and models.
     """
-    input_components = list(webui_manager.get_components())
+    if webui_manager is None:
+        raise ValueError("webui_manager is required for agent settings tab")
+
+    # input_components = list(webui_manager.get_components())  # Removed - unused
     tab_components = {}
 
     with gr.Column():
+        # Deprecation Notice
+        with gr.Group():
+            gr.Markdown("""
+            # ⚠️ Deprecation Notice
+
+            **This Agent Settings tab is being phased out.**
+
+            🔄 **Please use the Global Settings panel above for:**
+            - LLM provider configuration
+            - Model selection and parameters
+            - Temperature and token settings
+
+            The Global Settings panel provides a unified configuration experience
+            across all agents and will be the only settings location in future versions.
+
+            **This tab will be removed in a future release.**
+            """)
+
         # Header
         gr.Markdown(
-            "# 🤖 Agent Settings\n*Configure AI models, behavior, and performance parameters*"
+            "# 🤖 Agent Settings (Legacy)\n*Configure AI models, behavior, and performance parameters*"
         )
 
         # Preset configurations section
@@ -148,25 +231,26 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
 
         # Main LLM configuration
         with gr.Group():
-            gr.Markdown("## 🧠 Primary LLM Configuration")
+            gr.Markdown("## 🧠 Primary LLM Configuration (Legacy)")
+            gr.Markdown(
+                "**⚠️ Note: Please use Global Settings panel above instead of these legacy settings.**"
+            )
 
             with gr.Row():
                 llm_provider = gr.Dropdown(
-                    choices=[
-                        provider for provider, model in config.model_names.items()
-                    ],
-                    label="🏢 LLM Provider",
+                    choices=list(config.PROVIDER_DISPLAY_NAMES.keys()),
+                    label="🏢 LLM Provider (Legacy)",
                     value=os.getenv("DEFAULT_LLM", "openai"),
-                    info="Select the AI model provider",
+                    info="Select the AI model provider (Use Global Settings instead)",
                     interactive=True,
                 )
                 llm_model_name = gr.Dropdown(
-                    label="🤖 LLM Model Name",
-                    choices=config.model_names[os.getenv("DEFAULT_LLM", "openai")],
-                    value=config.model_names[os.getenv("DEFAULT_LLM", "openai")][0],
+                    label="🤖 LLM Model Name (Legacy)",
+                    choices=model_names.get(os.getenv("DEFAULT_LLM", "openai"), []),
+                    value=model_names.get(os.getenv("DEFAULT_LLM", "openai"), [""])[0],
                     interactive=True,
                     allow_custom_value=True,
-                    info="Select or enter a custom model name",
+                    info="Select or enter a custom model name (Use Global Settings instead)",
                 )
 
             with gr.Row():
@@ -175,8 +259,8 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
                     maximum=2.0,
                     value=0.6,
                     step=0.1,
-                    label="🌡️ LLM Temperature",
-                    info="Lower = more focused, Higher = more creative",
+                    label="🌡️ LLM Temperature (Legacy)",
+                    info="Lower = more focused, Higher = more creative (Use Global Settings instead)",
                     interactive=True,
                 )
 
@@ -220,9 +304,7 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
 
             with gr.Row():
                 planner_llm_provider = gr.Dropdown(
-                    choices=[
-                        provider for provider, model in config.model_names.items()
-                    ],
+                    choices=[provider for provider in config.DEFAULT_MODELS.keys()],
                     label="🏢 Planner LLM Provider",
                     info="Provider for planning tasks (optional)",
                     value=None,
@@ -442,9 +524,33 @@ def create_agent_settings_tab(webui_manager: WebuiManager):
     )
 
     # Configuration validation on change
+    # Only include actual input components, not layout components
+    input_components_only = [
+        llm_provider,
+        llm_model_name,
+        llm_temperature,
+        use_vision,
+        ollama_num_ctx,
+        llm_base_url,
+        llm_api_key,
+        planner_llm_provider,
+        planner_llm_model_name,
+        planner_llm_temperature,
+        planner_use_vision,
+        planner_ollama_num_ctx,
+        planner_llm_base_url,
+        planner_llm_api_key,
+        max_steps,
+        max_actions,
+        max_input_tokens,
+        tool_calling_method,
+        override_system_prompt,
+        extend_system_prompt,
+    ]
+
     for component in [llm_provider, llm_model_name, max_steps, max_actions]:
         component.change(
             validate_configuration,
-            inputs=list(tab_components.values()),
+            inputs=input_components_only,
             outputs=[config_status],
         )

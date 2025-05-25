@@ -11,7 +11,7 @@ from browser_use.utils import time_execution_sync
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
 
-from ..utils.mcp_client import (
+from src.ai_research_assistant.utils.mcp_client import (
     create_tool_param_model,
     setup_mcp_client_and_tools,
 )
@@ -181,9 +181,9 @@ class CustomController(Controller):
                             name=tool_name,
                             description=tool.description,
                             function=tool,
+                            param_model=param_model,
                         )
-                        # Set param_model directly to avoid type issues
-                        registered_action.param_model = param_model
+                        # No need to set param_model separately now
 
                         self.registry.registry.actions[tool_name] = registered_action
                         logger.info(f"Add mcp tool: {tool_name}")

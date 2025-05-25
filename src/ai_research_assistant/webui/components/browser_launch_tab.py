@@ -6,8 +6,8 @@ import gradio as gr
 from browser_use.browser.browser import BrowserConfig
 from browser_use.browser.context import BrowserContextConfig
 
-from src.browser_use_web_ui.browser.custom_browser import CustomBrowser
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.browser.custom_browser import CustomBrowser
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 

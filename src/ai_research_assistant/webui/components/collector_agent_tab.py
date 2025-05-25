@@ -6,11 +6,11 @@ from typing import Any, AsyncGenerator, Dict
 import gradio as gr
 from gradio.components import Component
 
-from src.browser_use_web_ui.agent.collector.collector_agent import (
+from src.ai_research_assistant.agent.collector.collector_agent import (
     run_parallel_pdf_research_agents,
     stop_pdf_research_agents,
 )
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 

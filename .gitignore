@@ -290,3 +290,47 @@ plans/**/*
 
 # Github
 .github/
+
+# ===========================================
+# DEVELOPMENT FILES: Temporary and cache files
+# ===========================================
+
+# Temporary files and directories (avoid .temp files)
+*.tmp
+*.temp
+.temp/
+temp/
+tmp/
+cache/
+.cache/
+
+# MCP cache directory
+tmp/mcp_cache/
+
+# Agent specific temporary directories
+tmp/agent_history/
+tmp/downloads/
+tmp/legal_research/
+tmp/deep_research/
+tmp/webui_settings/
+tmp/browser_data/
+tmp/logs/
+
+# Browser automation artifacts
+browser_cookies.json
+cookies.json
+*.gif
+profile/
+user_data/
+
+# Development artifacts that should not be committed
+*.temp.json
+*.temp.py
+*_temp.*
+temp_*
+
+# But DO track dev configuration files
+!dev/
+!dev/**/*.json
+!dev/**/*.py
+!dev/**/*.md

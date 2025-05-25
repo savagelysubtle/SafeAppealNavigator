@@ -1,0 +1,111 @@
+{
+  "mcp_servers": {
+    "unified_local_server": {
+      "name": "Unified Local MCP Server",
+      "description": "Local unified server with database, filesystem, and analysis tools",
+      "transport": {
+        "type": "stdio",
+        "command": "python",
+        "args": ["-m", "unified_mcp_server.main"],
+        "working_directory": "../../ToolRack/Python/src/unified_mcp_server"
+      },
+      "enabled": true,
+      "tools": [
+        "cursor_db",
+        "file_tree",
+        "codebase_ingest",
+        "vector_database",
+        "text_processing"
+      ],
+      "resources": [
+        "cursor://projects",
+        "filesystem://directory-structure",
+        "filesystem://codebase-summary"
+      ],
+      "prompts": [
+        "explore_cursor_projects",
+        "analyze_chat_data",
+        "compare_projects"
+      ]
+    },
+    "filesystem_server": {
+      "name": "Rust MCP Filesystem Server",
+      "description": "High-performance filesystem operations using Rust MCP server",
+      "transport": {
+        "type": "stdio",
+        "command": "rust-mcp-filesystem.exe",
+        "args": ["F:\\!WCBCLAIM", "F:\\AgentWCB"]
+      },
+      "enabled": true,
+      "tools": [
+        "create_directory",
+        "directory_tree",
+        "edit_file",
+        "get_file_info",
+        "list_allowed_directories",
+        "list_directory",
+        "move_file",
+        "read_file",
+        "read_multiple_files",
+        "search_files",
+        "unzip_file",
+        "write_file",
+        "zip_directory",
+        "zip_files"
+      ],
+      "resources": [
+        "filesystem://F:/!WCBCLAIM",
+        "filesystem://F:/AgentWCB",
+        "filesystem://directory-tree",
+        "filesystem://file-metadata",
+        "filesystem://directory-stats",
+        "filesystem://file-content",
+        "filesystem://search-results",
+        "filesystem://watch-events"
+      ],
+      "prompts": [
+        "explore_directory_structure",
+        "analyze_file_patterns",
+        "generate_file_report",
+        "suggest_file_organization",
+        "monitor_directory_changes"
+      ],
+      "notes": "Provides comprehensive access to WCB claim directories with high performance and advanced filesystem operations"
+    },
+    "research_server": {
+      "name": "Research Tools MCP Server",
+      "description": "External research and analysis tools",
+      "transport": {
+        "type": "stdio",
+        "command": "research-mcp-server",
+        "args": []
+      },
+      "enabled": false,
+      "tools": ["academic_search", "web_scraping", "document_analysis"],
+      "notes": "Configure when external research server is available"
+    },
+    "legal_server": {
+      "name": "Legal Research MCP Server",
+      "description": "Legal database and document analysis tools",
+      "transport": {
+        "type": "stdio",
+        "command": "legal-mcp-server",
+        "args": []
+      },
+      "enabled": false,
+      "tools": [
+        "legal_database_search",
+        "case_analysis",
+        "citation_extraction"
+      ],
+      "notes": "Configure when legal MCP server is available"
+    }
+  },
+  "global_settings": {
+    "timeout_seconds": 30,
+    "max_retries": 3,
+    "log_level": "INFO",
+    "enable_caching": true,
+    "cache_ttl_seconds": 3600
+  }
+}

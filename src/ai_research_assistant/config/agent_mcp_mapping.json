@@ -1,0 +1,219 @@
+{
+  "agent_mcp_mappings": {
+    "LegalCaseAgent": {
+      "required_servers": ["unified_local_server"],
+      "optional_servers": ["legal_server"],
+      "primary_tools": [
+        "cursor_db",
+        "file_tree",
+        "text_processing",
+        "vector_database"
+      ],
+      "tool_preferences": {
+        "document_search": "vector_database",
+        "file_operations": "file_tree",
+        "text_analysis": "text_processing",
+        "database_queries": "cursor_db"
+      },
+      "description": "Legal case research and analysis agent with document processing capabilities"
+    },
+    "DeepResearchAgent": {
+      "required_servers": ["unified_local_server"],
+      "optional_servers": ["research_server"],
+      "primary_tools": [
+        "codebase_ingest",
+        "file_tree",
+        "vector_database",
+        "text_processing"
+      ],
+      "tool_preferences": {
+        "code_analysis": "codebase_ingest",
+        "file_operations": "file_tree",
+        "document_search": "vector_database",
+        "text_processing": "text_processing"
+      },
+      "description": "Deep research agent for comprehensive topic analysis and investigation"
+    },
+    "BrowserUseAgent": {
+      "required_servers": [],
+      "optional_servers": ["unified_local_server"],
+      "primary_tools": ["file_tree", "text_processing"],
+      "tool_preferences": {
+        "file_operations": "file_tree",
+        "content_analysis": "text_processing"
+      },
+      "description": "Browser automation agent with optional MCP tool integration"
+    },
+    "CollectorAgent": {
+      "required_servers": ["unified_local_server", "filesystem_server"],
+      "optional_servers": [],
+      "primary_tools": [
+        "file_tree",
+        "vector_database",
+        "text_processing",
+        "read_file",
+        "write_file",
+        "create_directory",
+        "move_file",
+        "get_file_info"
+      ],
+      "tool_preferences": {
+        "file_operations": "file_tree",
+        "file_io": "filesystem_server",
+        "data_storage": "vector_database",
+        "content_processing": "text_processing",
+        "file_validation": "filesystem_server"
+      },
+      "description": "Data collection and PDF research agent with storage capabilities"
+    },
+    "IntakeAgent": {
+      "required_servers": ["unified_local_server", "filesystem_server"],
+      "optional_servers": [],
+      "primary_tools": [
+        "file_tree",
+        "text_processing",
+        "read_file",
+        "write_file",
+        "list_directory",
+        "create_directory",
+        "move_file",
+        "get_file_info",
+        "read_multiple_files"
+      ],
+      "tool_preferences": {
+        "file_operations": "file_tree",
+        "file_io": "filesystem_server",
+        "content_processing": "text_processing",
+        "directory_operations": "filesystem_server"
+      },
+      "description": "Document intake and processing agent with comprehensive file handling capabilities"
+    },
+    "EnhancedLegalIntakeAgent": {
+      "required_servers": ["unified_local_server", "filesystem_server"],
+      "optional_servers": ["legal_server"],
+      "primary_tools": [
+        "file_tree",
+        "text_processing",
+        "vector_database",
+        "read_file",
+        "write_file",
+        "list_directory",
+        "create_directory",
+        "move_file",
+        "search_files",
+        "get_file_info",
+        "read_multiple_files",
+        "directory_tree",
+        "zip_directory",
+        "unzip_file"
+      ],
+      "tool_preferences": {
+        "file_operations": "file_tree",
+        "file_io": "filesystem_server",
+        "content_processing": "text_processing",
+        "document_search": "vector_database",
+        "directory_operations": "filesystem_server",
+        "legal_analysis": "legal_server",
+        "file_organization": "filesystem_server"
+      },
+      "description": "Enhanced legal document intake agent with advanced file organization and processing"
+    },
+    "DatabaseMaintenanceAgent": {
+      "required_servers": ["unified_local_server", "filesystem_server"],
+      "optional_servers": [],
+      "primary_tools": [
+        "cursor_db",
+        "file_tree",
+        "read_file",
+        "write_file",
+        "list_directory",
+        "move_file",
+        "get_file_info",
+        "zip_directory",
+        "unzip_file"
+      ],
+      "tool_preferences": {
+        "database_operations": "cursor_db",
+        "file_operations": "file_tree",
+        "file_io": "filesystem_server",
+        "directory_operations": "filesystem_server",
+        "file_maintenance": "filesystem_server"
+      },
+      "description": "Database maintenance agent with file system access for database file operations"
+    },
+    "CrossReferenceAgent": {
+      "required_servers": ["unified_local_server"],
+      "optional_servers": ["filesystem_server"],
+      "primary_tools": [
+        "file_tree",
+        "text_processing",
+        "vector_database",
+        "read_file",
+        "read_multiple_files",
+        "get_file_info"
+      ],
+      "tool_preferences": {
+        "file_operations": "file_tree",
+        "content_analysis": "text_processing",
+        "similarity_search": "vector_database",
+        "document_access": "filesystem_server"
+      },
+      "description": "Cross-reference and relationship mapping agent with document analysis capabilities"
+    },
+    "SearchAgent": {
+      "required_servers": ["unified_local_server"],
+      "optional_servers": ["filesystem_server"],
+      "primary_tools": [
+        "vector_database",
+        "text_processing",
+        "file_tree",
+        "search_files",
+        "get_file_info",
+        "directory_tree"
+      ],
+      "tool_preferences": {
+        "semantic_search": "vector_database",
+        "text_analysis": "text_processing",
+        "file_search": "filesystem_server",
+        "directory_operations": "file_tree"
+      },
+      "description": "Search agent with comprehensive search capabilities across multiple data sources"
+    },
+    "LegalCaseResearchAgent": {
+      "required_servers": ["unified_local_server", "filesystem_server"],
+      "optional_servers": ["legal_server"],
+      "primary_tools": [
+        "cursor_db",
+        "file_tree",
+        "text_processing",
+        "vector_database",
+        "read_file",
+        "write_file",
+        "create_directory",
+        "get_file_info",
+        "search_files"
+      ],
+      "tool_preferences": {
+        "case_storage": "cursor_db",
+        "document_search": "vector_database",
+        "file_operations": "file_tree",
+        "file_io": "filesystem_server",
+        "text_analysis": "text_processing",
+        "legal_research": "legal_server"
+      },
+      "description": "Legal case research agent with database integration and file management"
+    }
+  },
+  "global_agent_settings": {
+    "default_timeout_seconds": 300,
+    "max_concurrent_tools": 3,
+    "enable_tool_caching": true,
+    "cache_duration_minutes": 60,
+    "fallback_behavior": "graceful_degradation",
+    "error_handling": {
+      "max_retries": 3,
+      "retry_delay_seconds": 1,
+      "ignore_non_critical_errors": true
+    }
+  }
+}

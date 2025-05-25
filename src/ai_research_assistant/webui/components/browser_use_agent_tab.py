@@ -18,11 +18,16 @@ from browser_use.browser.views import BrowserState
 from gradio.components import Component
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from src.browser_use_web_ui.agent.browser_use.browser_use_agent import BrowserUseAgent
-from src.browser_use_web_ui.browser.custom_browser import CustomBrowser
-from src.browser_use_web_ui.controller.custom_controller import CustomController
-from src.browser_use_web_ui.utils import llm_provider
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.agent.browser_use.browser_use_agent import (
+    BrowserUseAgent,
+)
+from src.ai_research_assistant.browser.custom_browser import CustomBrowser
+from src.ai_research_assistant.controller.custom_controller import CustomController
+from src.ai_research_assistant.utils.unified_llm_factory import (
+    UnifiedLLMFactory,
+    create_browser_llm,
+)
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)
 
@@ -30,38 +35,75 @@ logger = logging.getLogger(__name__)
 # --- Helper Functions --- (Defined at module level)
 
 
-async def _initialize_llm(
-    provider: Optional[str],
-    model_name: Optional[str],
-    temperature: float,
-    base_url: Optional[str],
-    api_key: Optional[str],
-    num_ctx: Optional[int] = None,
+def _get_llm_from_global_settings(
+    webui_manager: WebuiManager, llm_type: str = "primary"
 ) -> Optional[BaseChatModel]:
-    """Initializes the LLM based on settings. Returns None if provider/model is missing."""
-    if not provider or not model_name:
-        logger.info("LLM Provider or Model Name not specified, LLM will be None.")
-        return None
-    try:
-        # Use your actual LLM provider logic here
-        logger.info(
-            f"Initializing LLM: Provider={provider}, Model={model_name}, Temp={temperature}"
+    """Get LLM instance from global settings manager"""
+    if (
+        not hasattr(webui_manager, "global_settings_manager")
+        or not webui_manager.global_settings_manager
+    ):
+        logger.warning(
+            "Global settings manager not available, falling back to legacy method"
         )
-        # Example using a placeholder function
-        llm = llm_provider.get_llm_model(
+        return None
+
+    try:
+        factory = UnifiedLLMFactory()
+        llm = factory.create_llm_from_global_settings(
+            webui_manager.global_settings_manager, llm_type
+        )
+        logger.info(f"✅ Successfully created {llm_type} LLM from global settings")
+        return llm
+    except Exception as e:
+        logger.error(f"Failed to create {llm_type} LLM from global settings: {e}")
+        return None
+
+
+def _get_llm_from_legacy_settings(
+    webui_manager: WebuiManager,
+    components: Dict[Component, Any],
+    provider_key: str,
+    model_key: str,
+    temperature_key: str,
+    base_url_key: Optional[str] = None,
+    api_key_key: Optional[str] = None,
+) -> Optional[BaseChatModel]:
+    """Fallback method using legacy component-based settings"""
+
+    def get_setting(key, default=None):
+        comp = webui_manager.id_to_component.get(f"agent_settings.{key}")
+        return components.get(comp, default) if comp else default
+
+    provider = get_setting(provider_key)
+    model_name = get_setting(model_key)
+    temperature = get_setting(temperature_key, 0.7)
+    base_url = get_setting(base_url_key) if base_url_key else None
+    api_key = get_setting(api_key_key) if api_key_key else None
+
+    if not provider or not model_name:
+        logger.info(
+            f"LLM Provider or Model Name not specified for {provider_key}, LLM will be None."
+        )
+        return None
+
+    try:
+        llm = create_browser_llm(
             provider=provider,
             model_name=model_name,
             temperature=temperature,
-            base_url=base_url or None,
-            api_key=api_key or None,
-            # Add other relevant params like num_ctx for ollama
-            num_ctx=num_ctx if provider == "ollama" else None,
+            base_url=base_url,
+            api_key=api_key,
+            use_vision=True,  # Default for browser agent
+        )
+        logger.info(
+            f"✅ Successfully created LLM from legacy settings: {provider}:{model_name}"
         )
         return llm
     except Exception as e:
-        logger.error(f"Failed to initialize LLM: {e}", exc_info=True)
+        logger.error(f"Failed to create LLM from legacy settings: {e}")
         gr.Warning(
-            f"Failed to initialize LLM '{model_name}' for provider '{provider}'. Please check settings. Error: {e}"
+            f"Failed to initialize LLM '{model_name}' for provider '{provider}'. Error: {e}"
         )
         return None
 
@@ -329,15 +371,7 @@ async def run_agent_task(
 
     override_system_prompt = get_setting("override_system_prompt") or None
     extend_system_prompt = get_setting("extend_system_prompt") or None
-    llm_provider_name = get_setting(
-        "llm_provider", None
-    )  # Default to None if not found
-    llm_model_name = get_setting("llm_model_name", None)
-    llm_temperature = get_setting("llm_temperature", 0.6)
     use_vision = get_setting("use_vision", True)
-    ollama_num_ctx = get_setting("ollama_num_ctx", 16000)
-    llm_base_url = get_setting("llm_base_url") or None
-    llm_api_key = get_setting("llm_api_key") or None
     max_steps = get_setting("max_steps", 100)
     max_actions = get_setting("max_actions", 10)
     max_input_tokens = get_setting("max_input_tokens", 128000)
@@ -354,24 +388,19 @@ async def run_agent_task(
     )
 
     # Planner LLM Settings (Optional)
-    planner_llm_provider_name = get_setting("planner_llm_provider") or None
-    planner_llm = None
-    planner_use_vision = False
-    if planner_llm_provider_name:
-        planner_llm_model_name = get_setting("planner_llm_model_name")
-        planner_llm_temperature = get_setting("planner_llm_temperature", 0.6)
-        planner_ollama_num_ctx = get_setting("planner_ollama_num_ctx", 16000)
-        planner_llm_base_url = get_setting("planner_llm_base_url") or None
-        planner_llm_api_key = get_setting("planner_llm_api_key") or None
-        planner_use_vision = get_setting("planner_use_vision", False)
+    planner_use_vision = get_setting("planner_use_vision", False)
 
-        planner_llm = await _initialize_llm(
-            planner_llm_provider_name,
-            planner_llm_model_name,
-            planner_llm_temperature,
-            planner_llm_base_url,
-            planner_llm_api_key,
-            planner_ollama_num_ctx if planner_llm_provider_name == "ollama" else None,
+    # Try global settings first, then fallback to legacy component settings
+    planner_llm = _get_llm_from_global_settings(webui_manager, "planner")
+    if not planner_llm:
+        planner_llm = _get_llm_from_legacy_settings(
+            webui_manager,
+            components,
+            "planner_llm_provider",
+            "planner_llm_model_name",
+            "planner_llm_temperature",
+            "planner_llm_base_url",
+            "planner_llm_api_key",
         )
 
     # --- Browser Settings ---
@@ -410,14 +439,18 @@ async def run_agent_task(
         os.makedirs(save_download_path, exist_ok=True)
 
     # --- 2. Initialize LLM ---
-    main_llm = await _initialize_llm(
-        llm_provider_name,
-        llm_model_name,
-        llm_temperature,
-        llm_base_url,
-        llm_api_key,
-        ollama_num_ctx if llm_provider_name == "ollama" else None,
-    )
+    # Try global settings first, then fallback to legacy component settings
+    main_llm = _get_llm_from_global_settings(webui_manager, "primary")
+    if not main_llm:
+        main_llm = _get_llm_from_legacy_settings(
+            webui_manager,
+            components,
+            "llm_provider",
+            "llm_model_name",
+            "llm_temperature",
+            "llm_base_url",
+            "llm_api_key",
+        )
 
     if not main_llm:
         raise ValueError("Failed to initialize LLM. Please check your settings.")

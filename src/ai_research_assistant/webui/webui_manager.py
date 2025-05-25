@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from datetime import datetime
@@ -9,15 +10,16 @@ import gradio as gr
 from browser_use.agent.service import Agent
 from gradio.components import Component
 
-from src.browser_use_web_ui.agent.deep_research.deep_research_agent import (
+from src.ai_research_assistant.agent.deep_research.deep_research_agent import (
     DeepResearchAgent,
 )
-from src.browser_use_web_ui.agent.legal_research.legal_case_agent import (
+from src.ai_research_assistant.agent.legal_research.legal_case_agent import (
     LegalCaseResearchAgent,
 )
-from src.browser_use_web_ui.browser.custom_browser import CustomBrowser
-from src.browser_use_web_ui.browser.custom_context import CustomBrowserContext
-from src.browser_use_web_ui.controller.custom_controller import CustomController
+from src.ai_research_assistant.browser.custom_browser import CustomBrowser
+from src.ai_research_assistant.browser.custom_context import CustomBrowserContext
+from src.ai_research_assistant.config.mcp_client_config import mcp_config
+from src.ai_research_assistant.controller.custom_controller import CustomController
 
 
 class WebuiManager:
@@ -28,8 +30,35 @@ class WebuiManager:
         self.settings_save_dir = settings_save_dir
         os.makedirs(self.settings_save_dir, exist_ok=True)
 
-        # Shared MCP server config for all tabs
+        # MCP configuration integration
+        self.mcp_config_loader = mcp_config
         self.mcp_server_config: Optional[dict] = None
+
+        # Global settings manager - will be set by global_settings_panel.py
+        self.global_settings_manager: Optional[Any] = None
+
+        # Load MCP configuration on startup
+        self.refresh_mcp_config()
+
+    def refresh_mcp_config(self) -> None:
+        """Refresh MCP configuration from the configuration files."""
+        try:
+            self.mcp_server_config = self.mcp_config_loader.load_mcp_config()
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to load MCP configuration: {e}")
+            self.mcp_server_config = None
+
+    def get_mcp_tools_for_agent(self, agent_class_name: str) -> List[str]:
+        """Get MCP tools available for a specific agent."""
+        return self.mcp_config_loader.get_agent_tools(agent_class_name)
+
+    def validate_agent_mcp_requirements(self, agent_class_name: str) -> bool:
+        """Validate that an agent's MCP requirements are satisfied."""
+        validation = self.mcp_config_loader.validate_agent_requirements(
+            agent_class_name
+        )
+        return validation["valid"]
 
     def init_browser_use_agent(self) -> None:
         """
@@ -52,7 +81,7 @@ class WebuiManager:
         self.dr_agent: Optional[DeepResearchAgent] = None
         self.dr_current_task: Optional[asyncio.Task[Any]] = None
         self.dr_task_id: Optional[str] = None
-        self.dr_save_dir: Optional[str] = None
+        self.dr_save_dir: Optional[str] = "./tmp/deep_research"
 
     def init_collector_agent(self) -> None:
         """
@@ -60,7 +89,7 @@ class WebuiManager:
         """
         self.collector_current_task: Optional[asyncio.Task[Any]] = None
         self.collector_task_id: Optional[str] = None
-        self.collector_download_dir: Optional[str] = None
+        self.collector_download_dir: Optional[str] = "./tmp/collector_downloads"
 
     def init_legal_research_agent(self) -> None:
         """
@@ -69,8 +98,40 @@ class WebuiManager:
         self.lr_agent: Optional[LegalCaseResearchAgent] = None
         self.lr_current_task: Optional[asyncio.Task[Any]] = None
         self.lr_task_id: Optional[str] = None
-        self.lr_download_dir: Optional[str] = None
+        self.lr_download_dir: Optional[str] = "./tmp/legal_research"
         self.lr_research_results: Optional[Dict[str, Any]] = None
+
+    def init_intake_agent(self) -> None:
+        """
+        init intake agent
+        """
+        self.intake_current_task: Optional[asyncio.Task[Any]] = None
+        self.intake_task_id: Optional[str] = None
+        self.intake_output_dir: Optional[str] = "./tmp/intake_output"
+
+    def init_search_agent(self) -> None:
+        """
+        init search agent
+        """
+        self.search_current_task: Optional[asyncio.Task[Any]] = None
+        self.search_task_id: Optional[str] = None
+        self.search_results: Optional[Dict[str, Any]] = None
+
+    def init_cross_reference_agent(self) -> None:
+        """
+        init cross reference agent
+        """
+        self.cr_current_task: Optional[asyncio.Task[Any]] = None
+        self.cr_task_id: Optional[str] = None
+        self.cr_analysis_results: Optional[Dict[str, Any]] = None
+
+    def init_database_maintenance_agent(self) -> None:
+        """
+        init database maintenance agent
+        """
+        self.dm_current_task: Optional[asyncio.Task[Any]] = None
+        self.dm_task_id: Optional[str] = None
+        self.dm_maintenance_results: Optional[Dict[str, Any]] = None
 
     def add_components(
         self, tab_name: str, components_dict: dict[str, "Component"]
@@ -116,9 +177,24 @@ class WebuiManager:
                 cur_settings[comp_id] = components[comp]
 
         config_name = datetime.now().strftime("%Y%m%d-%H%M%S")
-        config_path = os.path.join(self.settings_save_dir, f"{config_name}.json")
+        config_path = os.path.join(
+            self.settings_save_dir, f"webui_config_{config_name}.json"
+        )
         with open(config_path, "w") as fw:
             json.dump(cur_settings, fw, indent=4)
+
+        return config_path
+
+    def save_settings(self, settings: Dict[str, Any]) -> str:
+        """
+        Save global settings and return the path to the saved settings file.
+        """
+        config_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+        config_path = os.path.join(
+            self.settings_save_dir, f"global_settings_{config_name}.json"
+        )
+        with open(config_path, "w") as fw:
+            json.dump(settings, fw, indent=4)
 
         return config_path
 
@@ -151,3 +227,28 @@ class WebuiManager:
             }
         )
         yield update_components
+
+    def get_agent_save_directory(
+        self, agent_type: str, task_id: Optional[str] = None
+    ) -> str:
+        """Get the appropriate save directory for an agent type."""
+        base_dirs = {
+            "deep_research": "./tmp/deep_research",
+            "legal_research": "./tmp/legal_research",
+            "collector": "./tmp/collector_downloads",
+            "browser_use": "./tmp/browser_history",
+        }
+
+        base_dir = base_dirs.get(agent_type, "./tmp/agent_output")
+
+        if task_id:
+            return os.path.join(base_dir, task_id)
+
+        return base_dir
+
+    def get_development_settings(self) -> Dict[str, Any]:
+        """Get development settings from the configuration system."""
+        try:
+            return self.mcp_config_loader.load_dev_settings()
+        except Exception:
+            return {}

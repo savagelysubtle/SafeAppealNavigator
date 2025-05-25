@@ -5,7 +5,7 @@ from typing import Any, Dict
 
 import gradio as gr
 
-from src.browser_use_web_ui.webui.webui_manager import WebuiManager
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 
 def get_preset_configs() -> Dict[str, Dict[str, Any]]:
@@ -278,9 +278,10 @@ def create_load_save_config_tab(webui_manager: WebuiManager):
             status_msg += "🔄 All UI components have been updated."
 
             # Return the config updates from webui_manager plus our status
-            final_updates = (
-                dict(config_updates) if hasattr(config_updates, "__iter__") else {}
-            )
+            if isinstance(config_updates, dict):
+                final_updates = config_updates.copy()
+            else:
+                final_updates = {}
             final_updates[config_status] = gr.update(value=status_msg)
 
             return final_updates
