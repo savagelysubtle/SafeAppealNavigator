@@ -23,6 +23,7 @@ from .components.intake_agent_tab import create_intake_agent_tab
 from .components.legal_research_tab import create_legal_research_tab
 from .components.load_save_config_tab import create_load_save_config_tab
 from .components.mcp_server_tab import create_mcp_server_tab
+from .components.orchestrator_tab import create_orchestrator_tab
 from .components.search_agent_tab import create_search_agent_tab
 from .webui_manager import WebuiManager
 
@@ -88,6 +89,7 @@ def create_ui(theme_name="Ocean"):
         # 🧠 AI Research Assistant
         ### Advanced WC-AT case research with AI-powered analysis and document generation
 
+        **🎯 NEW: Legal Research Orchestrator** - Unified workflow management for complete case processing
         **🌟 Phase 4 Complete:** All specialized agents now available - Intake, Search, Cross Reference, and Database Maintenance
         **🌟 Unified Settings:** All LLM and system configurations are managed in the Global Settings panel below.
         """)
@@ -101,6 +103,14 @@ def create_ui(theme_name="Ocean"):
 
         # Agent Tabs (simplified without duplicate settings)
         with gr.Tabs(elem_classes="agent-tabs") as main_tabs:
+            # Legal Research Orchestrator - PRIMARY WORKFLOW MANAGER
+            with gr.TabItem("🎯 Legal Orchestrator"):
+                gr.Markdown("""
+                **🌟 UNIFIED LEGAL WORKFLOW MANAGER**
+                *Complete case management from intake → research → analysis*
+                """)
+                create_orchestrator_tab(webui_manager)
+
             # Browser Use Agent Tab
             with gr.TabItem("🌐 Browser Agent"):
                 gr.Markdown("""
@@ -196,6 +206,7 @@ def create_ui(theme_name="Ocean"):
             with gr.Column(scale=2):
                 gr.Markdown("""
                 **💡 Tips:**
+                - **🎯 START HERE:** Use Legal Orchestrator tab for complete case workflows
                 - Configure all LLM settings in the Global Settings panel above
                 - Settings automatically sync to all agents
                 - Use Config Management tab to save/load your preferred setups

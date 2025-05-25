@@ -7,6 +7,9 @@ This module extends the base IntakeAgent with specialized workflows for:
 - Legal document type identification
 - Search point generation for Legal Research Agent
 - Case timeline reconstruction
+- Insurance company and medical provider tracking
+- OCR capabilities for scanned documents
+- Comprehensive document sorting and tracking
 """
 
 import json
@@ -48,6 +51,11 @@ class WCBDocumentType:
     APPROVAL_LETTER = "approval_letter"
     REQUEST_LETTER = "request_letter"
 
+    # Insurance and medical tracking
+    INSURANCE_DOCUMENT = "insurance_document"
+    MEDICAL_PROVIDER_DOCUMENT = "medical_provider_document"
+    USER_SUBMISSION = "user_submission"
+
     UNKNOWN = "unknown"
 
 
@@ -70,9 +78,52 @@ class LegalSearchPoint:
         self.created_at = datetime.now().isoformat()
 
 
+class DocumentTracker:
+    """Track document submissions and sources"""
+
+    def __init__(self):
+        self.insurance_companies = {}
+        self.medical_providers = {}
+        self.user_submissions = []
+        self.submission_timeline = []
+
+    def add_insurance_document(self, company_name: str, document_info: Dict[str, Any]):
+        """Track insurance company documents"""
+        if company_name not in self.insurance_companies:
+            self.insurance_companies[company_name] = []
+        self.insurance_companies[company_name].append(document_info)
+
+    def add_medical_provider(self, provider_name: str, document_info: Dict[str, Any]):
+        """Track medical provider documents"""
+        if provider_name not in self.medical_providers:
+            self.medical_providers[provider_name] = []
+        self.medical_providers[provider_name].append(document_info)
+
+    def add_user_submission(self, document_info: Dict[str, Any]):
+        """Track user-submitted documents"""
+        self.user_submissions.append(document_info)
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Get comprehensive tracking summary"""
+        return {
+            "insurance_companies": {
+                name: len(docs) for name, docs in self.insurance_companies.items()
+            },
+            "medical_providers": {
+                name: len(docs) for name, docs in self.medical_providers.items()
+            },
+            "user_submissions": len(self.user_submissions),
+            "total_documents": (
+                sum(len(docs) for docs in self.insurance_companies.values())
+                + sum(len(docs) for docs in self.medical_providers.values())
+                + len(self.user_submissions)
+            ),
+        }
+
+
 class EnhancedLegalIntakeAgent(IntakeAgent):
     """
-    Enhanced intake agent specialized for WCB legal case processing.
+    Enhanced intake agent specialized for comprehensive legal case processing.
 
     Capabilities:
     - Mass file dump processing with intelligent organization
@@ -81,12 +132,16 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
     - Automatic case file organization
     - Search point generation for legal research
     - Integration with legal case database
+    - Insurance company and medical provider tracking
+    - OCR capabilities for scanned documents
+    - Comprehensive document sorting and submission tracking
     """
 
     def __init__(
         self,
         legal_case_db: Optional[LegalCaseDatabase] = None,
         case_organization_directory: str = "./tmp/organized_cases",
+        enable_ocr: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -95,6 +150,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         self.legal_db = legal_case_db or LegalCaseDatabase()
         self.case_org_dir = Path(case_organization_directory)
         self.case_org_dir.mkdir(parents=True, exist_ok=True)
+        self.enable_ocr = enable_ocr
 
         # WCB document patterns for classification
         self.wcb_patterns = self._initialize_wcb_patterns()
@@ -105,6 +161,13 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         self.case_timeline: List[Dict[str, Any]] = []
         self.search_points: List[LegalSearchPoint] = []
         self.case_entities: Dict[str, List[str]] = {}
+
+        # Document tracking
+        self.document_tracker = DocumentTracker()
+
+        # Insurance and medical provider patterns
+        self.insurance_patterns = self._initialize_insurance_patterns()
+        self.medical_provider_patterns = self._initialize_medical_provider_patterns()
 
         logger.info(f"Enhanced Legal Intake Agent initialized: {self.agent_id}")
 
@@ -120,6 +183,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "reconstruct_case_timeline",
             "prepare_legal_research",
             "batch_legal_organize",
+            "track_document_sources",
+            "analyze_submission_patterns",
+            "generate_tracking_report",
         ]
         return base_tasks + legal_tasks
 
@@ -138,6 +204,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "reconstruct_case_timeline": self._reconstruct_case_timeline,
             "prepare_legal_research": self._prepare_legal_research,
             "batch_legal_organize": self._batch_legal_organize,
+            "track_document_sources": self._track_document_sources,
+            "analyze_submission_patterns": self._analyze_submission_patterns,
+            "generate_tracking_report": self._generate_tracking_report,
         }
 
         if task_type in legal_tasks:
@@ -164,11 +233,12 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         Steps:
         1. Validate and scan dump directory
         2. Create case organization structure
-        3. Process and categorize all files
+        3. Process and categorize all files (OCR last for efficiency)
         4. Extract legal entities and metadata
-        5. Reconstruct case timeline
-        6. Generate search points for legal research
-        7. Prepare database entries
+        5. Track document sources and submissions
+        6. Reconstruct case timeline
+        7. Generate search points for legal research
+        8. Prepare database entries
         """
         dump_directory = params.get("dump_directory")
         case_id = (
@@ -192,6 +262,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         self.current_case_files = []
         self.case_timeline = []
         self.search_points = []
+        self.document_tracker = DocumentTracker()
 
         results = {
             "success": True,
@@ -213,7 +284,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             org_result = await self._create_case_organization(case_id)
             results["stages"]["organization"] = org_result
 
-            # Stage 3: Process and categorize files
+            # Stage 3: Process and categorize files (OCR-optimized order)
             process_result = await self._batch_process_legal_files(
                 dump_path, scan_result["files"]
             )
@@ -223,19 +294,24 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             entities_result = await self._extract_case_entities()
             results["stages"]["entities"] = entities_result
 
-            # Stage 5: Reconstruct timeline
+            # Stage 5: Track document sources
+            tracking_result = await self._track_document_sources({})
+            results["stages"]["document_tracking"] = tracking_result
+
+            # Stage 6: Reconstruct timeline
             timeline_result = await self._reconstruct_case_timeline({})
             results["stages"]["timeline"] = timeline_result
 
-            # Stage 6: Generate search points
+            # Stage 7: Generate search points
             search_result = await self._generate_search_points({})
             results["stages"]["search_points"] = search_result
 
-            # Stage 7: Prepare legal research
+            # Stage 8: Prepare legal research
             research_result = await self._prepare_legal_research({})
             results["stages"]["legal_research"] = research_result
 
             # Final summary
+            tracking_summary = self.document_tracker.get_summary()
             results.update(
                 {
                     "end_time": datetime.now().isoformat(),
@@ -244,6 +320,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                     "search_points_generated": len(self.search_points),
                     "timeline_events": len(self.case_timeline),
                     "case_directory": str(self.case_org_dir / case_id),
+                    "document_tracking": tracking_summary,
                 }
             )
 
@@ -260,12 +337,28 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         return results
 
     async def _scan_dump_directory(self, dump_path: Path) -> Dict[str, Any]:
-        """Scan dump directory and catalog all files."""
+        """Scan dump directory and catalog all files with OCR optimization."""
         logger.info(f"Scanning dump directory: {dump_path}")
 
-        supported_extensions = {".pdf", ".docx", ".doc", ".txt", ".html", ".json"}
+        supported_extensions = {
+            ".pdf",
+            ".docx",
+            ".doc",
+            ".txt",
+            ".html",
+            ".json",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".tiff",
+            ".bmp",
+        }
         files_found = []
         total_size = 0
+
+        # Categorize files for processing order (non-OCR first)
+        text_files = []
+        ocr_files = []
 
         try:
             for file_path in dump_path.rglob("*"):
@@ -282,8 +375,24 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                             file_path.stat().st_mtime
                         ).isoformat(),
                     }
+
+                    # Categorize for processing order
+                    if file_path.suffix.lower() in {
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                        ".tiff",
+                        ".bmp",
+                    }:
+                        ocr_files.append(file_info)
+                    else:
+                        text_files.append(file_info)
+
                     files_found.append(file_info)
                     total_size += file_info["size_mb"]
+
+            # Reorder for efficient processing (text files first, OCR last)
+            files_found = text_files + ocr_files
 
             return {
                 "success": True,
@@ -291,6 +400,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                 "total_files": len(files_found),
                 "total_size_mb": round(total_size, 2),
                 "file_types": self._analyze_file_types(files_found),
+                "text_files": len(text_files),
+                "ocr_files": len(ocr_files),
+                "processing_order": "text_first_ocr_last",
             }
 
         except Exception as e:
@@ -318,8 +430,12 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "employment_records",
             "forms",
             "correspondence",
+            "insurance_documents",
+            "medical_providers",
+            "user_submissions",
             "timeline",
             "search_points",
+            "tracking_reports",
             "unknown",
         ]
 
@@ -338,6 +454,15 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                 "processing_agent": self.agent_id,
                 "organization_structure": subdirs,
                 "status": "processing",
+                "ocr_enabled": self.enable_ocr,
+                "features": [
+                    "document_classification",
+                    "entity_extraction",
+                    "timeline_reconstruction",
+                    "search_point_generation",
+                    "source_tracking",
+                    "submission_analysis",
+                ],
             }
 
             with open(metadata_file, "w") as f:
@@ -359,10 +484,11 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
     async def _batch_process_legal_files(
         self, dump_path: Path, files: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Process and organize all files from the dump."""
+        """Process and organize all files from the dump with OCR optimization."""
         processed_count = 0
         failed_count = 0
         categorized_files = {}
+        ocr_processed = 0
 
         for file_info in files:
             try:
@@ -375,6 +501,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                     processed_count += 1
                     doc_type = process_result["wcb_document_type"]
 
+                    if process_result.get("ocr_used", False):
+                        ocr_processed += 1
+
                     if doc_type not in categorized_files:
                         categorized_files[doc_type] = []
                     categorized_files[doc_type].append(
@@ -382,6 +511,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                             "original_path": str(file_path),
                             "organized_path": process_result["organized_path"],
                             "metadata": process_result["metadata"],
+                            "document_source": process_result.get("document_source"),
                         }
                     )
 
@@ -402,19 +532,21 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "success": True,
             "documents_processed": processed_count,
             "documents_failed": failed_count,
+            "ocr_documents_processed": ocr_processed,
             "categorized_files": categorized_files,
             "total_files": len(files),
         }
 
     async def _process_single_legal_document(self, file_path: Path) -> Dict[str, Any]:
-        """Process a single document and organize it."""
+        """Process a single document and organize it with enhanced source tracking."""
         try:
-            # Extract content
-            content_result = await self._extract_text_content(file_path)
+            # Extract content (with OCR if needed)
+            content_result = await self._extract_text_content_with_ocr(file_path)
             if not content_result["success"]:
                 return content_result
 
             content = content_result["content"]
+            ocr_used = content_result.get("ocr_used", False)
 
             # Identify WCB document type
             wcb_type_result = await self._identify_wcb_document_type(
@@ -424,6 +556,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             wcb_doc_type = wcb_type_result.get(
                 "wcb_document_type", WCBDocumentType.UNKNOWN
             )
+
+            # Identify document source (insurance, medical provider, user)
+            source_result = await self._identify_document_source(content, file_path)
 
             # Extract metadata
             metadata_result = await self._extract_metadata(file_path)
@@ -435,35 +570,156 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
 
             # Organize file
             organized_path = await self._organize_file_by_type(
-                file_path, wcb_doc_type, entities_result.get("entities", {})
+                file_path,
+                wcb_doc_type,
+                entities_result.get("entities", {}),
+                source_result,
             )
 
             return {
                 "success": True,
                 "wcb_document_type": wcb_doc_type,
                 "organized_path": organized_path,
+                "document_source": source_result,
+                "ocr_used": ocr_used,
                 "metadata": {
                     "original_path": str(file_path),
                     "content_length": len(content),
                     "file_metadata": metadata_result,
                     "legal_entities": entities_result.get("entities", {}),
                     "classification_confidence": wcb_type_result.get("confidence", 0.0),
+                    "source_confidence": source_result.get("confidence", 0.0),
+                    "ocr_used": ocr_used,
                 },
             }
 
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def _extract_text_content_with_ocr(self, file_path: Path) -> Dict[str, Any]:
+        """Extract text content with OCR support for image files."""
+        try:
+            # Check if it's an image file that needs OCR
+            image_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp"}
+
+            if file_path.suffix.lower() in image_extensions:
+                if self.enable_ocr:
+                    return await self._extract_ocr_content(file_path)
+                else:
+                    return {
+                        "success": False,
+                        "error": f"OCR disabled for image file: {file_path}",
+                    }
+            else:
+                # Use regular text extraction
+                result = await self._extract_text_content(file_path)
+                result["ocr_used"] = False
+                return result
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def _extract_ocr_content(self, file_path: Path) -> Dict[str, Any]:
+        """Extract text from image files using OCR."""
+        try:
+            import pytesseract
+            from PIL import Image
+
+            # Open and process image
+            image = Image.open(file_path)
+
+            # Extract text using OCR
+            text = pytesseract.image_to_string(image)
+
+            return {
+                "success": True,
+                "content": text,
+                "ocr_used": True,
+                "extraction_method": "pytesseract",
+                "content_length": len(text),
+            }
+
+        except ImportError:
+            return {
+                "success": False,
+                "error": "OCR dependencies not installed (pytesseract, PIL)",
+                "ocr_used": False,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"OCR extraction failed: {e}",
+                "ocr_used": False,
+            }
+
+    async def _identify_document_source(
+        self, content: str, file_path: Path
+    ) -> Dict[str, Any]:
+        """Identify if document is from insurance company, medical provider, or user."""
+        content_lower = content.lower()
+        filename_lower = file_path.name.lower()
+
+        # Check for insurance company indicators
+        insurance_score = 0
+        matched_companies = []
+        for company, patterns in self.insurance_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, content_lower) or re.search(
+                    pattern, filename_lower
+                ):
+                    insurance_score += 1
+                    if company not in matched_companies:
+                        matched_companies.append(company)
+
+        # Check for medical provider indicators
+        medical_score = 0
+        matched_providers = []
+        for provider_type, patterns in self.medical_provider_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, content_lower) or re.search(
+                    pattern, filename_lower
+                ):
+                    medical_score += 1
+                    if provider_type not in matched_providers:
+                        matched_providers.append(provider_type)
+
+        # Determine source type
+        if insurance_score > medical_score and insurance_score > 0:
+            return {
+                "source_type": "insurance_company",
+                "confidence": min(insurance_score / 3.0, 1.0),
+                "matched_entities": matched_companies,
+                "details": f"Identified {len(matched_companies)} insurance company indicators",
+            }
+        elif medical_score > 0:
+            return {
+                "source_type": "medical_provider",
+                "confidence": min(medical_score / 3.0, 1.0),
+                "matched_entities": matched_providers,
+                "details": f"Identified {len(matched_providers)} medical provider indicators",
+            }
+        else:
+            return {
+                "source_type": "user_submission",
+                "confidence": 0.5,
+                "matched_entities": [],
+                "details": "No clear insurance or medical provider indicators found",
+            }
+
     async def _organize_file_by_type(
-        self, file_path: Path, wcb_type: str, entities: Dict[str, Any]
+        self,
+        file_path: Path,
+        wcb_type: str,
+        entities: Dict[str, Any],
+        source_info: Dict[str, Any],
     ) -> str:
-        """Organize file into appropriate directory based on type."""
+        """Organize file into appropriate directory based on type and source."""
         if not self.current_case_id:
             raise ValueError("No current case ID set")
 
         case_dir = self.case_org_dir / self.current_case_id
 
-        # Map WCB types to directories
+        # Map WCB types to directories with source consideration
         type_dir_map = {
             WCBDocumentType.DECISION: "decisions",
             WCBDocumentType.TRIBUNAL_DECISION: "decisions",
@@ -484,7 +740,16 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             WCBDocumentType.UNKNOWN: "unknown",
         }
 
-        target_dir = case_dir / type_dir_map.get(wcb_type, "unknown")
+        # Override directory based on source if it's insurance or medical
+        source_type = source_info.get("source_type", "unknown")
+        if source_type == "insurance_company":
+            target_dir = case_dir / "insurance_documents"
+        elif source_type == "medical_provider":
+            target_dir = case_dir / "medical_providers"
+        elif source_type == "user_submission":
+            target_dir = case_dir / "user_submissions"
+        else:
+            target_dir = case_dir / type_dir_map.get(wcb_type, "unknown")
 
         # Create meaningful filename with metadata
         date_prefix = ""
@@ -493,10 +758,19 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             earliest_date = min(entities["dates"])
             date_prefix = f"{earliest_date.replace('-', '')}_"
 
+        # Add source prefix
+        source_prefix = ""
+        if source_type == "insurance_company" and source_info.get("matched_entities"):
+            source_prefix = f"INS_{source_info['matched_entities'][0][:10]}_"
+        elif source_type == "medical_provider" and source_info.get("matched_entities"):
+            source_prefix = f"MED_{source_info['matched_entities'][0][:10]}_"
+        elif source_type == "user_submission":
+            source_prefix = "USER_"
+
         # Sanitize filename
         base_name = file_path.stem
         sanitized_name = re.sub(r"[^\w\-_\.]", "_", base_name)
-        new_filename = f"{date_prefix}{sanitized_name}{file_path.suffix}"
+        new_filename = f"{source_prefix}{date_prefix}{sanitized_name}{file_path.suffix}"
 
         target_path = target_dir / new_filename
 
@@ -540,6 +814,60 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                 r"claim.*form",
                 r"medical.*form",
                 r"wcb.*form",
+            ],
+        }
+
+    def _initialize_insurance_patterns(self) -> Dict[str, List[str]]:
+        """Initialize patterns for insurance company identification."""
+        return {
+            "general_insurance": [
+                r"insurance.*company",
+                r"insurance.*corp",
+                r"insurance.*ltd",
+                r"claims.*department",
+                r"policy.*number",
+                r"claim.*number.*\d+",
+                r"adjuster",
+                r"underwriter",
+            ],
+            "specific_companies": [
+                r"icbc",
+                r"cooperators",
+                r"state.*farm",
+                r"intact.*insurance",
+                r"aviva",
+                r"rbc.*insurance",
+                r"td.*insurance",
+                r"wawanesa",
+            ],
+        }
+
+    def _initialize_medical_provider_patterns(self) -> Dict[str, List[str]]:
+        """Initialize patterns for medical provider identification."""
+        return {
+            "hospitals": [
+                r"hospital",
+                r"medical.*center",
+                r"health.*center",
+                r"clinic",
+                r"emergency.*department",
+                r"radiology.*department",
+            ],
+            "doctors": [
+                r"dr\.\s+[a-z]+",
+                r"doctor",
+                r"physician",
+                r"specialist",
+                r"consultant",
+                r"medical.*director",
+            ],
+            "practices": [
+                r"medical.*practice",
+                r"family.*practice",
+                r"orthopedic.*clinic",
+                r"physiotherapy",
+                r"chiropractic",
+                r"rehabilitation.*center",
             ],
         }
 
@@ -620,7 +948,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             Respond with JSON: {{"type": "...", "confidence": 0.0-1.0, "reasoning": "..."}}
             """
 
-            llm = await self._get_llm_instance()
+            llm = self._get_llm_instance()
             if not llm:
                 return {
                     "wcb_document_type": WCBDocumentType.UNKNOWN,
@@ -683,6 +1011,8 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "case_references": [],
             "decision_outcomes": [],
             "appeal_numbers": [],
+            "insurance_companies": [],
+            "medical_providers": [],
         }
 
         # Extract claim numbers
@@ -723,6 +1053,17 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             if re.search(condition, content, re.IGNORECASE):
                 entities["medical_conditions"].append(condition)
 
+        # Extract insurance companies and medical providers
+        for company, patterns in self.insurance_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    entities["insurance_companies"].append(company)
+
+        for provider, patterns in self.medical_provider_patterns.items():
+            for pattern in patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    entities["medical_providers"].append(provider)
+
         # Use LLM for more sophisticated entity extraction
         llm_entities = await self._llm_extract_entities(content, doc_type)
 
@@ -734,6 +1075,9 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         # Clean and deduplicate
         for key in entities:
             entities[key] = list(set(entities[key]))  # Remove duplicates
+
+        # Store for later use
+        self.case_entities = entities
 
         return {
             "success": True,
@@ -759,11 +1103,13 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                 "medical_conditions": [...],
                 "employers": [...],
                 "decision_outcomes": [...],
-                "appeal_numbers": [...]
+                "appeal_numbers": [...],
+                "insurance_companies": [...],
+                "medical_providers": [...]
             }}
             """
 
-            llm = await self._get_llm_instance()
+            llm = self._get_llm_instance()
             if not llm:
                 return {}
 
@@ -777,6 +1123,258 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         except Exception as e:
             logger.error(f"LLM entity extraction failed: {e}")
             return {}
+
+    async def _track_document_sources(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Track and categorize document sources for submission analysis."""
+
+        for file_path in self.current_case_files:
+            try:
+                # Read organized file metadata to get source information
+                # This would typically be stored during processing
+                # For now, we'll re-analyze the file
+                content_result = await self._extract_text_content_with_ocr(file_path)
+                if content_result["success"]:
+                    source_info = await self._identify_document_source(
+                        content_result["content"], file_path
+                    )
+
+                    document_info = {
+                        "file_path": str(file_path),
+                        "file_name": file_path.name,
+                        "source_type": source_info["source_type"],
+                        "confidence": source_info["confidence"],
+                        "matched_entities": source_info.get("matched_entities", []),
+                        "processed_at": datetime.now().isoformat(),
+                    }
+
+                    # Add to appropriate tracker
+                    if source_info["source_type"] == "insurance_company":
+                        for company in source_info.get("matched_entities", ["unknown"]):
+                            self.document_tracker.add_insurance_document(
+                                company, document_info
+                            )
+                    elif source_info["source_type"] == "medical_provider":
+                        for provider in source_info.get(
+                            "matched_entities", ["unknown"]
+                        ):
+                            self.document_tracker.add_medical_provider(
+                                provider, document_info
+                            )
+                    else:
+                        self.document_tracker.add_user_submission(document_info)
+
+            except Exception as e:
+                logger.warning(f"Error tracking source for {file_path}: {e}")
+
+        # Save tracking data
+        await self._save_tracking_data()
+
+        return {
+            "success": True,
+            "tracking_summary": self.document_tracker.get_summary(),
+            "detailed_tracking": {
+                "insurance_companies": len(self.document_tracker.insurance_companies),
+                "medical_providers": len(self.document_tracker.medical_providers),
+                "user_submissions": len(self.document_tracker.user_submissions),
+            },
+        }
+
+    async def _save_tracking_data(self):
+        """Save document tracking data to case directory."""
+        if not self.current_case_id:
+            return
+
+        case_dir = self.case_org_dir / self.current_case_id
+        tracking_file = case_dir / "tracking_reports" / "document_tracking.json"
+        tracking_file.parent.mkdir(exist_ok=True)
+
+        tracking_data = {
+            "case_id": self.current_case_id,
+            "generated_at": datetime.now().isoformat(),
+            "summary": self.document_tracker.get_summary(),
+            "insurance_companies": self.document_tracker.insurance_companies,
+            "medical_providers": self.document_tracker.medical_providers,
+            "user_submissions": self.document_tracker.user_submissions,
+        }
+
+        with open(tracking_file, "w") as f:
+            json.dump(tracking_data, f, indent=2)
+
+    async def _analyze_submission_patterns(
+        self, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Analyze patterns in document submissions."""
+        analysis = {
+            "submission_timeline": [],
+            "source_analysis": {},
+            "document_types": {},
+            "recommendations": [],
+        }
+
+        # Analyze submission patterns
+        summary = self.document_tracker.get_summary()
+
+        # Source distribution analysis
+        total_docs = summary["total_documents"]
+        if total_docs > 0:
+            analysis["source_analysis"] = {
+                "insurance_percentage": (summary["user_submissions"] / total_docs)
+                * 100,
+                "medical_percentage": (
+                    len(self.document_tracker.medical_providers) / total_docs
+                )
+                * 100,
+                "user_percentage": (summary["user_submissions"] / total_docs) * 100,
+            }
+
+        # Generate recommendations
+        if summary["insurance_companies"] > 3:
+            analysis["recommendations"].append(
+                "High number of insurance companies involved - consider consolidation review"
+            )
+
+        if summary["medical_providers"] > 5:
+            analysis["recommendations"].append(
+                "Multiple medical providers - ensure all reports are current and relevant"
+            )
+
+        if summary["user_submissions"] < (total_docs * 0.3):
+            analysis["recommendations"].append(
+                "Low user submission rate - may need to request additional documentation"
+            )
+
+        return {
+            "success": True,
+            "analysis": analysis,
+            "total_documents_analyzed": total_docs,
+        }
+
+    async def _generate_tracking_report(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate comprehensive tracking and submission report."""
+
+        report = {
+            "case_id": self.current_case_id,
+            "report_generated": datetime.now().isoformat(),
+            "executive_summary": {},
+            "detailed_breakdown": {},
+            "recommendations": [],
+            "action_items": [],
+        }
+
+        # Get tracking summary
+        summary = self.document_tracker.get_summary()
+
+        # Executive summary
+        report["executive_summary"] = {
+            "total_documents_processed": summary["total_documents"],
+            "insurance_companies_identified": len(summary["insurance_companies"]),
+            "medical_providers_identified": len(summary["medical_providers"]),
+            "user_submissions": summary["user_submissions"],
+            "case_complexity": self._assess_case_complexity(summary),
+        }
+
+        # Detailed breakdown
+        report["detailed_breakdown"] = {
+            "insurance_companies": summary["insurance_companies"],
+            "medical_providers": summary["medical_providers"],
+            "document_distribution": self._calculate_document_distribution(summary),
+            "timeline_analysis": len(self.case_timeline),
+            "search_points_generated": len(self.search_points),
+        }
+
+        # Generate recommendations
+        report["recommendations"] = await self._generate_case_recommendations(summary)
+
+        # Save report
+        if self.current_case_id:
+            await self._save_tracking_report(report)
+
+        return {
+            "success": True,
+            "report": report,
+            "report_file": f"case_{self.current_case_id}_tracking_report.json",
+        }
+
+    def _assess_case_complexity(self, summary: Dict[str, Any]) -> str:
+        """Assess case complexity based on document and source counts."""
+        total_docs = summary["total_documents"]
+        total_sources = len(summary["insurance_companies"]) + len(
+            summary["medical_providers"]
+        )
+
+        if total_docs > 50 and total_sources > 10:
+            return "High"
+        elif total_docs > 20 and total_sources > 5:
+            return "Medium"
+        else:
+            return "Low"
+
+    def _calculate_document_distribution(
+        self, summary: Dict[str, Any]
+    ) -> Dict[str, float]:
+        """Calculate percentage distribution of document sources."""
+        total = summary["total_documents"]
+        if total == 0:
+            return {"insurance": 0, "medical": 0, "user": 0}
+
+        return {
+            "insurance_percentage": (
+                sum(summary["insurance_companies"].values()) / total
+            )
+            * 100,
+            "medical_percentage": (sum(summary["medical_providers"].values()) / total)
+            * 100,
+            "user_percentage": (summary["user_submissions"] / total) * 100,
+        }
+
+    async def _generate_case_recommendations(
+        self, summary: Dict[str, Any]
+    ) -> List[str]:
+        """Generate case-specific recommendations."""
+        recommendations = []
+
+        # Insurance-related recommendations
+        if len(summary["insurance_companies"]) > 3:
+            recommendations.append(
+                "Multiple insurance companies involved - verify coverage periods and responsibilities"
+            )
+
+        # Medical provider recommendations
+        if len(summary["medical_providers"]) > 5:
+            recommendations.append(
+                "High number of medical providers - ensure continuity of care documentation"
+            )
+
+        # Document volume recommendations
+        if summary["total_documents"] > 100:
+            recommendations.append(
+                "Large document volume - consider digital organization and indexing"
+            )
+
+        # User submission recommendations
+        user_ratio = summary["user_submissions"] / max(summary["total_documents"], 1)
+        if user_ratio < 0.2:
+            recommendations.append(
+                "Low user submission rate - may need to request additional personal documentation"
+            )
+
+        return recommendations
+
+    async def _save_tracking_report(self, report: Dict[str, Any]):
+        """Save comprehensive tracking report."""
+        if not self.current_case_id:
+            return
+
+        case_dir = self.case_org_dir / self.current_case_id
+        report_file = (
+            case_dir
+            / "tracking_reports"
+            / f"comprehensive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
+        report_file.parent.mkdir(exist_ok=True)
+
+        with open(report_file, "w") as f:
+            json.dump(report, f, indent=2)
 
     async def _generate_search_points(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate structured search points for the Legal Research Agent."""
@@ -797,10 +1395,6 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         # Generate search points based on case documents
         for file_path in self.current_case_files:
             try:
-                # Read organized file metadata
-                case_dir = self.case_org_dir / self.current_case_id
-                metadata_file = case_dir / "case_metadata.json"
-
                 # Create search points based on document types and entities
                 if "decisions" in str(file_path):
                     search_points.append(
@@ -813,13 +1407,25 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                         )
                     )
 
-                if "medical_reports" in str(file_path):
+                if "medical_reports" in str(file_path) or "medical_providers" in str(
+                    file_path
+                ):
                     search_points.append(
                         LegalSearchPoint(
                             search_type="medical_precedent",
                             keywords=["medical evidence", "similar conditions"],
                             context="Find cases with similar medical evidence",
                             priority="medium",
+                        )
+                    )
+
+                if "insurance_documents" in str(file_path):
+                    search_points.append(
+                        LegalSearchPoint(
+                            search_type="insurance_dispute",
+                            keywords=["insurance coverage", "policy interpretation"],
+                            context="Find cases involving similar insurance disputes",
+                            priority="high",
                         )
                     )
 
@@ -834,6 +1440,17 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
                     keywords=[condition, "case law", "precedent"],
                     context=f"Find precedent cases involving {condition}",
                     priority="high",
+                )
+            )
+
+        # Generate source-based search points
+        for company in self.document_tracker.insurance_companies.keys():
+            search_points.append(
+                LegalSearchPoint(
+                    search_type="insurance_company_precedent",
+                    keywords=[company, "similar disputes", "coverage decisions"],
+                    context=f"Find cases involving {company}",
+                    priority="medium",
                 )
             )
 
@@ -888,18 +1505,31 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         # Extract dates and events from all processed documents
         for file_path in self.current_case_files:
             try:
-                # This would be enhanced to extract actual timeline events
-                # For now, we'll create a basic timeline structure
+                # Enhanced timeline reconstruction with source tracking
+                file_stat = file_path.stat()
                 timeline_events.append(
                     {
-                        "date": datetime.now().isoformat(),
+                        "date": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
                         "event_type": "document_processed",
                         "description": f"Processed document: {Path(file_path).name}",
                         "document_reference": str(file_path),
+                        "file_size": file_stat.st_size,
                     }
                 )
             except Exception as e:
                 logger.warning(f"Error processing timeline for {file_path}: {e}")
+
+        # Add source-based timeline events
+        for company, docs in self.document_tracker.insurance_companies.items():
+            timeline_events.append(
+                {
+                    "date": datetime.now().isoformat(),
+                    "event_type": "insurance_documentation",
+                    "description": f"Processed {len(docs)} documents from {company}",
+                    "source": company,
+                    "document_count": len(docs),
+                }
+            )
 
         # Sort timeline by date
         timeline_events.sort(key=lambda x: x["date"])
@@ -950,12 +1580,17 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             ],
             "document_summary": {
                 "total_documents": len(self.current_case_files),
-                "organized_structure": list(case_dir.iterdir()),
+                "organized_structure": [
+                    d.name for d in case_dir.iterdir() if d.is_dir()
+                ],
                 "timeline_events": len(self.case_timeline),
+                "tracking_summary": self.document_tracker.get_summary(),
             },
             "next_steps": [
                 "Execute precedent searches using search points",
                 "Analyze similar cases in database",
+                "Review insurance company patterns",
+                "Analyze medical provider documentation",
                 "Generate legal research report",
                 "Identify key legal arguments",
             ],
@@ -1029,6 +1664,13 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             if subdir.is_dir():
                 doc_counts[subdir.name] = len(list(subdir.glob("*")))
 
+        # Load tracking data if available
+        tracking_file = case_dir / "tracking_reports" / "document_tracking.json"
+        tracking_data = {}
+        if tracking_file.exists():
+            with open(tracking_file, "r") as f:
+                tracking_data = json.load(f)
+
         return {
             "success": True,
             "case_id": case_id,
@@ -1037,6 +1679,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "document_counts": doc_counts,
             "total_documents": sum(doc_counts.values()),
             "organization_complete": metadata.get("status") == "completed",
+            "tracking_data": tracking_data.get("summary", {}),
         }
 
     async def _organize_case_files(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -1058,12 +1701,14 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "case_references": [],
             "decision_outcomes": [],
             "appeal_numbers": [],
+            "insurance_companies": [],
+            "medical_providers": [],
         }
 
         for file_path in self.current_case_files:
             try:
                 # Read file content
-                content_result = await self._extract_text_content(file_path)
+                content_result = await self._extract_text_content_with_ocr(file_path)
                 if content_result["success"]:
                     # Extract entities from this file
                     entities_result = await self._extract_legal_entities(
@@ -1095,7 +1740,7 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "files_processed": len(self.current_case_files),
         }
 
-    async def _get_llm_instance(self):
+    def _get_llm_instance(self):
         """Get LLM instance from the unified factory using global settings."""
         try:
             from ...utils.unified_llm_factory import get_llm_factory
@@ -1121,9 +1766,11 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             else:
                 # Fallback to default settings if no global settings manager
                 logger.warning(
-                    "⚠️ No global settings manager found, using default OpenAI configuration"
+                    "⚠️ No global settings manager found, using default Google configuration"
                 )
-                return factory.create_llm_for_legal_agent("openai", "gpt-4")
+                return factory.create_llm_for_legal_agent(
+                    "google", "gemini-2.5-flash-preview-04-17"
+                )
 
         except Exception as e:
             logger.warning(f"Could not get LLM instance: {e}")

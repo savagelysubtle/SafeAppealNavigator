@@ -1,5 +1,6 @@
 import argparse
 import logging
+import socket
 
 from dotenv import load_dotenv
 
@@ -19,6 +20,23 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
+def find_available_port(start_port: int, max_attempts: int = 10) -> int:
+    """Find an available port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            try:
+                sock.bind(("127.0.0.1", port))
+                logger.info(f"✅ Found available port: {port}")
+                return port
+            except OSError:
+                logger.debug(f"Port {port} is in use, trying next...")
+                continue
+
+    raise OSError(
+        f"Could not find available port in range {start_port}-{start_port + max_attempts}"
+    )
+
+
 def main():
     logger.info("🚀 Starting AI Research Assistant WebUI...")
 
@@ -35,6 +53,18 @@ def main():
         help="Theme to use for the UI",
     )
     args = parser.parse_args()
+
+    # Find available port if the requested port is in use
+    try:
+        available_port = find_available_port(args.port)
+        if available_port != args.port:
+            logger.warning(
+                f"⚠️ Port {args.port} is in use, using port {available_port} instead"
+            )
+        args.port = available_port
+    except OSError as e:
+        logger.error(f"❌ {e}")
+        return
 
     logger.info("📋 Configuration:")
     logger.info(f"  - IP: {args.ip}")
