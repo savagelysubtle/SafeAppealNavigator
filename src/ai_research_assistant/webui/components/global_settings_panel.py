@@ -78,6 +78,20 @@ class GlobalSettingsManager:
             "enable_logging": True,
             "log_level": "INFO",
             "enable_telemetry": False,
+            # Rate Limiting Configuration
+            "rate_limiting_enabled": True,
+            "rate_limit_google_rpm": 5,  # Conservative for experimental models
+            "rate_limit_openai_rpm": 60,
+            "rate_limit_anthropic_rpm": 50,
+            "rate_limit_mistral_rpm": 60,
+            "rate_limit_ollama_rpm": 100,  # Local, usually no limits
+            "rate_limit_deepseek_rpm": 30,
+            "rate_limit_watsonx_rpm": 60,
+            "rate_limit_delay_range_min": 1,  # Min delay in seconds (1-60 as requested)
+            "rate_limit_delay_range_max": 60,  # Max delay in seconds
+            "rate_limit_max_retries": 5,
+            "rate_limit_exponential_base": 2.0,
+            "rate_limit_jitter_enabled": True,
         }
 
     def _get_default_model_for_provider(self, provider: str) -> str:
@@ -115,6 +129,26 @@ class GlobalSettingsManager:
             "model_name": self.get_setting("planner_llm_model"),
             "temperature": self.get_setting("planner_llm_temperature"),
             "use_vision": self.get_setting("planner_llm_use_vision"),
+        }
+
+    def get_rate_limiting_config(self, provider: str) -> Dict[str, Any]:
+        """Get rate limiting configuration for a specific provider"""
+        if not self.get_setting("rate_limiting_enabled"):
+            return {"enabled": False}
+
+        provider_key = f"rate_limit_{provider.lower()}_rpm"
+        rpm = self.get_setting(provider_key, 60)  # Default fallback
+
+        return {
+            "enabled": True,
+            "requests_per_minute": rpm,
+            "delay_range": (
+                self.get_setting("rate_limit_delay_range_min", 1),
+                self.get_setting("rate_limit_delay_range_max", 60),
+            ),
+            "max_retries": self.get_setting("rate_limit_max_retries", 5),
+            "exponential_base": self.get_setting("rate_limit_exponential_base", 2.0),
+            "jitter": self.get_setting("rate_limit_jitter_enabled", True),
         }
 
     def export_settings(self) -> Dict[str, Any]:
@@ -355,6 +389,143 @@ def create_global_settings_panel(webui_manager: WebuiManager):
                     info="How deep to go in research chains",
                 )
 
+        # Rate Limiting Section
+        with gr.Group():
+            gr.Markdown("## ⏱️ Rate Limiting Configuration")
+            gr.Markdown("""
+            **Smart API Rate Limiting** - Prevents 429 errors and respects provider limits.
+            Supports Google Gemini (5 RPM), OpenAI, and Anthropic with 1-60 second delays.
+            """)
+
+            rate_limiting_enabled = gr.Checkbox(
+                label="🛡️ Enable Rate Limiting",
+                value=settings_manager.get_setting("rate_limiting_enabled"),
+                info="Protect against API rate limit errors with intelligent backoff",
+            )
+
+            with gr.Row():
+                with gr.Column():
+                    gr.Markdown("### 🤖 Provider Limits (Requests Per Minute)")
+
+                    rate_limit_google = gr.Slider(
+                        minimum=1,
+                        maximum=300,
+                        value=settings_manager.get_setting("rate_limit_google_rpm"),
+                        step=1,
+                        label="🟢 Google Gemini RPM",
+                        info="Conservative: 5 RPM for experimental models",
+                    )
+
+                    rate_limit_openai = gr.Slider(
+                        minimum=1,
+                        maximum=10000,
+                        value=settings_manager.get_setting("rate_limit_openai_rpm"),
+                        step=1,
+                        label="🔵 OpenAI RPM",
+                        info="Standard: 60 RPM for most tiers",
+                    )
+
+                    rate_limit_anthropic = gr.Slider(
+                        minimum=1,
+                        maximum=5000,
+                        value=settings_manager.get_setting("rate_limit_anthropic_rpm"),
+                        step=1,
+                        label="🟡 Anthropic RPM",
+                        info="Tier 1: 50 RPM default",
+                    )
+
+                with gr.Column():
+                    gr.Markdown("### ⚙️ Backoff Configuration")
+
+                    with gr.Row():
+                        rate_limit_delay_min = gr.Slider(
+                            minimum=1,
+                            maximum=10,
+                            value=settings_manager.get_setting(
+                                "rate_limit_delay_range_min"
+                            ),
+                            step=1,
+                            label="⏱️ Min Delay (seconds)",
+                            info="Minimum retry delay",
+                        )
+
+                        rate_limit_delay_max = gr.Slider(
+                            minimum=10,
+                            maximum=60,
+                            value=settings_manager.get_setting(
+                                "rate_limit_delay_range_max"
+                            ),
+                            step=1,
+                            label="⏱️ Max Delay (seconds)",
+                            info="Maximum retry delay (1-60s as requested)",
+                        )
+
+                    rate_limit_max_retries = gr.Slider(
+                        minimum=1,
+                        maximum=10,
+                        value=settings_manager.get_setting("rate_limit_max_retries"),
+                        step=1,
+                        label="🔄 Max Retries",
+                        info="Maximum retry attempts before giving up",
+                    )
+
+                    rate_limit_exponential_base = gr.Slider(
+                        minimum=1.1,
+                        maximum=3.0,
+                        value=settings_manager.get_setting(
+                            "rate_limit_exponential_base"
+                        ),
+                        step=0.1,
+                        label="📈 Exponential Base",
+                        info="Backoff multiplier (2.0 = double each retry)",
+                    )
+
+                    rate_limit_jitter = gr.Checkbox(
+                        label="🎲 Enable Jitter",
+                        value=settings_manager.get_setting("rate_limit_jitter_enabled"),
+                        info="Add randomness to prevent synchronized retries",
+                    )
+
+            # Advanced provider limits (collapsed by default)
+            with gr.Accordion("🔧 Advanced Provider Limits", open=False):
+                with gr.Row():
+                    rate_limit_mistral = gr.Slider(
+                        minimum=1,
+                        maximum=1000,
+                        value=settings_manager.get_setting("rate_limit_mistral_rpm"),
+                        step=1,
+                        label="🔴 Mistral RPM",
+                        info="Mistral AI rate limits",
+                    )
+
+                    rate_limit_deepseek = gr.Slider(
+                        minimum=1,
+                        maximum=300,
+                        value=settings_manager.get_setting("rate_limit_deepseek_rpm"),
+                        step=1,
+                        label="🔮 DeepSeek RPM",
+                        info="DeepSeek API rate limits",
+                    )
+
+                with gr.Row():
+                    rate_limit_ollama = gr.Slider(
+                        minimum=1,
+                        maximum=1000,
+                        value=settings_manager.get_setting("rate_limit_ollama_rpm"),
+                        step=1,
+                        label="🦙 Ollama RPM",
+                        info="Local Ollama (usually no limits)",
+                    )
+
+                    rate_limit_watsonx = gr.Slider(
+                        minimum=1,
+                        maximum=1000,
+                        value=settings_manager.get_setting("rate_limit_watsonx_rpm"),
+                        step=1,
+                        label="🔷 WatsonX RPM",
+                        info="IBM WatsonX rate limits",
+                    )
+
         # Quick Actions
         with gr.Row():
             reset_button = gr.Button("🔄 Reset to Defaults", variant="secondary")
@@ -386,6 +557,19 @@ def create_global_settings_panel(webui_manager: WebuiManager):
         "browser_height": browser_height,
         "research_parallel": research_parallel,
         "research_depth": research_depth,
+        "rate_limiting_enabled": rate_limiting_enabled,
+        "rate_limit_google": rate_limit_google,
+        "rate_limit_openai": rate_limit_openai,
+        "rate_limit_anthropic": rate_limit_anthropic,
+        "rate_limit_mistral": rate_limit_mistral,
+        "rate_limit_deepseek": rate_limit_deepseek,
+        "rate_limit_ollama": rate_limit_ollama,
+        "rate_limit_watsonx": rate_limit_watsonx,
+        "rate_limit_delay_min": rate_limit_delay_min,
+        "rate_limit_delay_max": rate_limit_delay_max,
+        "rate_limit_max_retries": rate_limit_max_retries,
+        "rate_limit_exponential_base": rate_limit_exponential_base,
+        "rate_limit_jitter": rate_limit_jitter,
         "settings_status": settings_status,
     }
 
