@@ -334,3 +334,6 @@ temp_*
 !dev/**/*.json
 !dev/**/*.py
 !dev/**/*.md
+
+# Archive
+archive/
