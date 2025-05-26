@@ -1,5 +1,5 @@
 """
-Legal Research Orchestrator Tab Component
+Legal Research Orchestrator page entry
 
 Provides a unified interface for managing and controlling the legal research orchestrator,
 which coordinates multiple specialized agents in a streamlined workflow.
