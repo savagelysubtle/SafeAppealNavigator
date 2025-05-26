@@ -20,6 +20,7 @@ from .components.database_maintenance_agent_tab import (
 from .components.deep_research_agent_tab import create_deep_research_agent_tab
 from .components.global_settings_panel import create_global_settings_panel
 from .components.intake_agent_tab import create_intake_agent_tab
+from .components.interactive_chat_tab import create_interactive_chat_tab
 from .components.legal_research_tab import create_legal_research_tab
 from .components.load_save_config_tab import create_load_save_config_tab
 from .components.mcp_server_tab import create_mcp_server_tab
@@ -49,6 +50,9 @@ def create_ui(theme_name="Ocean"):
     """
     # Initialize WebUI Manager
     webui_manager = WebuiManager()
+
+    # Initialize chat manager for cross-component communication
+    webui_manager.init_interactive_chat()
 
     # Create the main interface
     with gr.Blocks(
@@ -110,6 +114,14 @@ def create_ui(theme_name="Ocean"):
                 *Complete case management from intake → research → analysis*
                 """)
                 create_orchestrator_tab(webui_manager)
+
+            # Interactive Chat Tab - AI-POWERED LEGAL ASSISTANCE
+            with gr.TabItem("💬 Interactive Chat"):
+                gr.Markdown("""
+                **🤖 AI-POWERED LEGAL CONSULTATION**
+                *Document analysis, research guidance, and strategic assistance*
+                """)
+                create_interactive_chat_tab(webui_manager)
 
             # Browser Use Agent Tab
             with gr.TabItem("🌐 Browser Agent"):

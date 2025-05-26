@@ -133,6 +133,12 @@ class WebuiManager:
         self.dm_task_id: Optional[str] = None
         self.dm_maintenance_results: Optional[Dict[str, Any]] = None
 
+    def init_interactive_chat(self) -> None:
+        """
+        init interactive chat manager
+        """
+        self.chat_manager: Optional[Any] = None
+
     def add_components(
         self, tab_name: str, components_dict: dict[str, "Component"]
     ) -> None:

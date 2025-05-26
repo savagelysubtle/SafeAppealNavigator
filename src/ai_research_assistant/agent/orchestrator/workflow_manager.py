@@ -79,10 +79,13 @@ class WorkflowManager:
     - Error handling and recovery
     """
 
-    def __init__(self, config=None, work_dir: Optional[Path] = None):
+    def __init__(
+        self, config=None, work_dir: Optional[Path] = None, agent_coordinator=None
+    ):
         self.config = config
         self.work_dir = work_dir or Path("./tmp/workflows")
         self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.agent_coordinator = agent_coordinator
 
         # Active workflows
         self.workflows: Dict[str, WorkflowData] = {}
@@ -244,27 +247,48 @@ class WorkflowManager:
             return False
 
         workflow = self.workflows[workflow_id]
-        workflow_file = self.work_dir / f"workflow_{workflow_id}.json"
+        workflow_file_path = self.work_dir / f"workflow_{workflow_id}.json"
 
         try:
-            workflow_data = {
-                "workflow_id": workflow.workflow_id,
-                "state": workflow.state.value,
-                "created_at": workflow.created_at.isoformat(),
-                "updated_at": workflow.updated_at.isoformat(),
-                "client_info": workflow.client_info,
-                "case_type": workflow.case_type,
-                "documents": workflow.documents,
-                "research_queries": workflow.research_queries,
-                "data": workflow.data,
-                "transitions": workflow.transitions,
-                "metadata": workflow.metadata,
-            }
+            workflow_data_str = json.dumps(
+                {
+                    "workflow_id": workflow.workflow_id,
+                    "state": workflow.state.value,
+                    "created_at": workflow.created_at.isoformat(),
+                    "updated_at": workflow.updated_at.isoformat(),
+                    "client_info": workflow.client_info,
+                    "case_type": workflow.case_type,
+                    "documents": workflow.documents,
+                    "research_queries": workflow.research_queries,
+                    "data": workflow.data,
+                    "transitions": workflow.transitions,
+                    "metadata": workflow.metadata,
+                },
+                indent=2,
+            )
 
-            with open(workflow_file, "w") as f:
-                json.dump(workflow_data, f, indent=2)
+            if self.agent_coordinator:
+                # Use MCP to write file
+                mcp_result = await self.agent_coordinator.execute_agent_task(
+                    agent_type="filesystem_server",
+                    task_type="write_file",
+                    parameters={
+                        "file_path": str(workflow_file_path),
+                        "content": workflow_data_str,
+                        "overwrite": True,
+                    },
+                )
+                if not mcp_result.get("success"):
+                    logger.error(
+                        f"MCP Error saving workflow {workflow_id}: {mcp_result.get('error')}"
+                    )
+                    return False
+            else:
+                # Fallback to standard python I/O if no coordinator
+                with open(workflow_file_path, "w") as f:
+                    f.write(workflow_data_str)
 
-            logger.debug(f"Saved workflow {workflow_id} to {workflow_file}")
+            logger.debug(f"Saved workflow {workflow_id} to {workflow_file_path}")
             return True
 
         except Exception as e:
@@ -274,14 +298,41 @@ class WorkflowManager:
     async def load_workflow_state(self, workflow_id: str) -> bool:
         """Load workflow state from disk"""
 
-        workflow_file = self.work_dir / f"workflow_{workflow_id}.json"
-
-        if not workflow_file.exists():
-            return False
+        workflow_file_path = self.work_dir / f"workflow_{workflow_id}.json"
 
         try:
-            with open(workflow_file, "r") as f:
-                data = json.load(f)
+            content_data_str: Optional[str] = None
+            if self.agent_coordinator:
+                if not await self.agent_coordinator.execute_agent_task(
+                    agent_type="filesystem_server",
+                    task_type="get_file_info",
+                    parameters={"file_path": str(workflow_file_path)},
+                ).get("success", False):
+                    return False
+
+                mcp_result = await self.agent_coordinator.execute_agent_task(
+                    agent_type="filesystem_server",
+                    task_type="read_file",
+                    parameters={"file_path": str(workflow_file_path)},
+                )
+                if mcp_result.get("success"):
+                    content_data_str = mcp_result.get("content")
+                else:
+                    logger.error(
+                        f"MCP Error loading workflow {workflow_id}: {mcp_result.get('error')}"
+                    )
+                    return False
+            else:
+                if not workflow_file_path.exists():
+                    return False
+                with open(workflow_file_path, "r") as f:
+                    content_data_str = f.read()
+
+            if content_data_str is None:
+                logger.error(f"Failed to read content for workflow {workflow_id}")
+                return False
+
+            data = json.loads(content_data_str)
 
             workflow = WorkflowData(
                 workflow_id=data["workflow_id"],
@@ -299,7 +350,7 @@ class WorkflowManager:
 
             self.workflows[workflow_id] = workflow
 
-            logger.debug(f"Loaded workflow {workflow_id} from {workflow_file}")
+            logger.debug(f"Loaded workflow {workflow_id} from {workflow_file_path}")
             return True
 
         except Exception as e:
@@ -344,9 +395,28 @@ class WorkflowManager:
                 del self.workflows[workflow_id]
 
             # Remove from disk
-            workflow_file = self.work_dir / f"workflow_{workflow_id}.json"
-            if workflow_file.exists():
-                workflow_file.unlink()
+            workflow_file_path = self.work_dir / f"workflow_{workflow_id}.json"
+
+            if self.agent_coordinator:
+                mcp_result_info = await self.agent_coordinator.execute_agent_task(
+                    agent_type="filesystem_server",
+                    task_type="get_file_info",
+                    parameters={"file_path": str(workflow_file_path)},
+                )
+                if mcp_result_info.get("success"):  # File exists
+                    mcp_result_delete = await self.agent_coordinator.execute_agent_task(
+                        agent_type="filesystem_server",
+                        task_type="delete_file",
+                        parameters={"file_path": str(workflow_file_path)},
+                    )
+                    if not mcp_result_delete.get("success"):
+                        logger.error(
+                            f"MCP Error deleting workflow {workflow_id}: {mcp_result_delete.get('error')}"
+                        )
+                        # Potentially return False or raise an error, depending on desired strictness
+            else:
+                if workflow_file_path.exists():
+                    workflow_file_path.unlink()
 
             logger.info(f"Deleted workflow {workflow_id}")
             return True

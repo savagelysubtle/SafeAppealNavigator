@@ -112,8 +112,23 @@ def create_orchestrator_tab(webui_manager):
                     )
 
                 with gr.Column():
+                    # Document input options
+                    gr.Markdown("### 📄 Document Input Options")
+
+                    # Option 1: Directory path (like intake agent)
+                    source_directory = gr.Textbox(
+                        label="📂 Source Directory",
+                        placeholder="Path to directory containing documents to process...",
+                        lines=1,
+                        interactive=True,
+                        info="Directory containing the documents you want to process (alternative to file upload)",
+                    )
+
+                    gr.Markdown("**— OR —**", elem_classes="or-separator")
+
+                    # Option 2: Direct file upload (existing)
                     document_files = gr.File(
-                        label="Upload Documents",
+                        label="📎 Upload Documents",
                         file_count="multiple",
                         file_types=[
                             ".pdf",
@@ -125,6 +140,7 @@ def create_orchestrator_tab(webui_manager):
                             ".jpeg",
                         ],
                     )
+
                     research_queries = gr.Textbox(
                         label="Research Queries (one per line)",
                         placeholder="Workers compensation back injury\nWCAT appeal precedents\n...",
@@ -153,22 +169,6 @@ def create_orchestrator_tab(webui_manager):
                         refresh_status_btn = gr.Button("🔄 Refresh Status")
                         next_step_btn = gr.Button("➡️ Proceed to Next Step")
 
-                # Chat interface tab
-                with gr.TabItem("💬 Interactive Chat"):
-                    gr.Markdown("**Chat with the Legal Research System**")
-
-                    chat_history = gr.Chatbot(
-                        label="Legal Consultation Chat", height=300, show_label=True
-                    )
-
-                    with gr.Row():
-                        chat_input = gr.Textbox(
-                            label="Ask a question about your case",
-                            placeholder="What are the key precedents for my case?",
-                            scale=4,
-                        )
-                        chat_send_btn = gr.Button("Send", scale=1)
-
                 # Agent status tab
                 with gr.TabItem("🤖 Agent Status"):
                     agent_status_display = gr.JSON(
@@ -176,6 +176,25 @@ def create_orchestrator_tab(webui_manager):
                     )
 
                     refresh_agents_btn = gr.Button("🔄 Refresh Agent Status")
+
+        # Interactive Chat Reference - Link to dedicated chat tab
+        with gr.Accordion("💬 Interactive Chat Reference", open=False):
+            gr.Markdown("""
+            ### 🚀 Dedicated Chat Interface Available
+
+            For comprehensive legal consultation and document analysis, visit the **💬 Interactive Chat** tab.
+
+            The dedicated chat interface provides:
+            - **Document Analysis** - Upload and analyze case documents
+            - **Legal Research** - Find precedents and similar cases
+            - **Strategy Discussion** - Develop case arguments and approaches
+            - **Workflow Assistance** - Get guidance on orchestrator processes
+
+            **🔗 Integration**: The chat system can access and reference all workflow data from this orchestrator
+            including processed documents, research findings, and case timeline information.
+
+            **💡 Tip**: Start your workflow here first, then use the Interactive Chat tab for detailed analysis and consultation.
+            """)
 
         # Results section
         with gr.Accordion("📋 Workflow Results", open=False):
@@ -207,6 +226,7 @@ def create_orchestrator_tab(webui_manager):
         client_name_val,
         case_type_val,
         case_description_val,
+        source_directory_val,
         documents,
         queries,
         enable_chat_val,
@@ -246,11 +266,85 @@ def create_orchestrator_tab(webui_manager):
                 "created_at": datetime.now().isoformat(),
             }
 
+            # Handle document input - either from directory or uploaded files
             document_paths = []
-            if documents:
+
+            logger.info("📋 Document input options:")
+            logger.info(f"  - Source Directory: '{source_directory_val}'")
+            logger.info(
+                f"  - Uploaded Files: {len(documents) if documents else 0} files"
+            )
+
+            # Check if source directory is provided
+            if source_directory_val and source_directory_val.strip():
+                # Use source directory path
+                from pathlib import Path
+
+                logger.info(f"🔍 Using source directory: '{source_directory_val}'")
+
+                source_path = Path(source_directory_val.strip())
+                if source_path.exists() and source_path.is_dir():
+                    # Get all relevant files from the directory
+                    supported_extensions = [
+                        ".pdf",
+                        ".doc",
+                        ".docx",
+                        ".txt",
+                        ".png",
+                        ".jpg",
+                        ".jpeg",
+                    ]
+                    for ext in supported_extensions:
+                        document_paths.extend(
+                            [str(f) for f in source_path.glob(f"*{ext}")]
+                        )
+                        document_paths.extend(
+                            [str(f) for f in source_path.glob(f"**/*{ext}")]
+                        )  # Include subdirectories
+
+                    # Remove duplicates while preserving order
+                    document_paths = list(dict.fromkeys(document_paths))
+
+                    logger.info(
+                        f"📁 Found {len(document_paths)} documents in directory"
+                    )
+
+                    if not document_paths:
+                        logger.warning(
+                            f"❌ No supported documents found in directory: {source_directory_val}"
+                        )
+                        return (
+                            f"⚠️ **No supported documents found in directory**\n\nDirectory: `{source_directory_val}`\n\nSupported formats: {', '.join(supported_extensions)}",
+                            {},
+                            gr.update(interactive=True),
+                            gr.update(interactive=False),
+                        )
+                else:
+                    logger.error(f"❌ Invalid source directory: {source_directory_val}")
+                    return (
+                        f"❌ **Invalid source directory**\n\nPath does not exist or is not a directory: `{source_directory_val}`",
+                        {},
+                        gr.update(interactive=True),
+                        gr.update(interactive=False),
+                    )
+            elif documents:
+                # Use uploaded files
+                logger.info("📎 Using uploaded files")
                 for doc in documents:
                     if hasattr(doc, "name"):
                         document_paths.append(doc.name)
+                logger.info(f"📁 Processing {len(document_paths)} uploaded files")
+            else:
+                # No documents provided
+                logger.warning(
+                    "❌ No documents provided - neither directory nor uploads"
+                )
+                return (
+                    "⚠️ **No documents provided**\n\nPlease either specify a source directory or upload files.",
+                    {},
+                    gr.update(interactive=True),
+                    gr.update(interactive=False),
+                )
 
             research_queries_list = []
             if queries:
@@ -345,33 +439,6 @@ def create_orchestrator_tab(webui_manager):
             logger.error(f"Error refreshing status: {e}")
             return {"error": str(e)}
 
-    async def send_chat_message(message, history):
-        """Send chat message to orchestrator"""
-        try:
-            if orchestrator_instance.value and current_workflow_id.value:
-                result = await orchestrator_instance.value.run_task(
-                    task_type="interactive_chat", parameters={"message": message}
-                )
-
-                if result.get("success"):
-                    response = result.get("response", "No response received")
-                    history.append([message, response])
-                    return history, ""
-                else:
-                    error_msg = result.get("error", "Failed to process message")
-                    history.append([message, f"❌ Error: {error_msg}"])
-                    return history, ""
-            else:
-                history.append(
-                    [message, "❌ No active workflow. Please start a workflow first."]
-                )
-                return history, ""
-
-        except Exception as e:
-            logger.error(f"Error in chat: {e}")
-            history.append([message, f"❌ Error: {str(e)}"])
-            return history, ""
-
     # Wire up event handlers
     start_workflow_btn.click(
         fn=start_workflow,
@@ -379,6 +446,7 @@ def create_orchestrator_tab(webui_manager):
             client_name,
             case_type,
             case_description,
+            source_directory,
             document_files,
             research_queries,
             enable_chat,
@@ -409,21 +477,8 @@ def create_orchestrator_tab(webui_manager):
         fn=refresh_workflow_status, outputs=[workflow_steps_display]
     )
 
-    chat_send_btn.click(
-        fn=send_chat_message,
-        inputs=[chat_input, chat_history],
-        outputs=[chat_history, chat_input],
-    )
-
-    chat_input.submit(
-        fn=send_chat_message,
-        inputs=[chat_input, chat_history],
-        outputs=[chat_history, chat_input],
-    )
-
     return {
         "workflow_status": workflow_status_display,
         "workflow_steps": workflow_steps_display,
-        "chat_history": chat_history,
         "agent_status": agent_status_display,
     }

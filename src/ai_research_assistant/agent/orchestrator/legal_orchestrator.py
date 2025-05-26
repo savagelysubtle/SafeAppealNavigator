@@ -94,14 +94,16 @@ class LegalOrchestratorAgent(BaseAgent):
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize core components
-        self.workflow_manager = WorkflowManager(
-            config=self.orchestrator_config, work_dir=self.work_dir
-        )
-
         self.agent_coordinator = AgentCoordinator(
             max_concurrent=self.orchestrator_config.max_concurrent_agents,
             timeout_seconds=self.orchestrator_config.timeout_seconds,
             global_settings_manager=global_settings_manager,
+        )
+
+        self.workflow_manager = WorkflowManager(
+            config=self.orchestrator_config,
+            work_dir=self.work_dir,
+            agent_coordinator=self.agent_coordinator,
         )
 
         # Workflow state
@@ -390,15 +392,21 @@ class LegalOrchestratorAgent(BaseAgent):
     async def _get_workflow_status(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Get current workflow status"""
 
-        workflow_id = parameters.get("workflow_id", self.active_workflow_id)
-        if not workflow_id:
-            return {"success": False, "error": "No workflow ID provided"}
+        current_workflow_id = parameters.get("workflow_id", self.active_workflow_id)
+        if not current_workflow_id:
+            return {
+                "success": False,
+                "error": "No workflow ID provided or active workflow",
+            }
 
-        workflow_state = await self.workflow_manager.get_workflow_state(workflow_id)
+        # At this point, current_workflow_id is guaranteed to be a str
+        workflow_state = await self.workflow_manager.get_workflow_state(
+            current_workflow_id
+        )
 
         return {
             "success": True,
-            "workflow_id": workflow_id,
+            "workflow_id": current_workflow_id,
             "state": workflow_state,
             "current_mode": self.current_mode.value,
         }
