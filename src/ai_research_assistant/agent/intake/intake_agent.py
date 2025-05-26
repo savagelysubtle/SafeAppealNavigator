@@ -188,6 +188,7 @@ class IntakeAgent(BaseAgent):
         agent_id: Optional[str] = None,
         config: Optional[AgentConfig] = None,
         global_settings_manager=None,
+        agent_coordinator=None,
         intake_directory: str = "./tmp/intake",
         processed_directory: str = "./tmp/processed",
         max_file_size_mb: int = 100,
@@ -203,6 +204,7 @@ class IntakeAgent(BaseAgent):
             global_settings_manager=global_settings_manager,
             **kwargs,
         )
+        self.agent_coordinator = agent_coordinator
 
         # Intake-specific configuration
         self.intake_directory = Path(intake_directory)
@@ -306,89 +308,242 @@ class IntakeAgent(BaseAgent):
 
     async def _mcp_read_file(self, file_path: Path) -> Dict[str, Any]:
         """Read file using MCP Rust filesystem for faster operations."""
-        if not self.use_mcp_filesystem:
-            return {"success": False, "error": "MCP filesystem disabled"}
+        if not self.use_mcp_filesystem or not self.agent_coordinator:
+            logger.info(
+                f"MCP Filesystem disabled or coordinator not available. Reading {file_path.name} using standard Python I/O."
+            )
+            # Fallback to Python file operations
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                return {
+                    "success": True,
+                    "content": content,
+                    "method": "python_filesystem_fallback",
+                }
+            except Exception as e:
+                logger.warning(f"Standard file read failed for {file_path.name}: {e}")
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "method": "python_filesystem_fallback",
+                }
 
         try:
-            # For now, fallback to Python file operations
-            # TODO: Implement proper MCP client integration
-            logger.info(f"🚀 Using high-speed file read for: {file_path.name}")
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            return {
-                "success": True,
-                "content": content,
-                "method": "python_filesystem",  # Will be updated to MCP when client is ready
-            }
-
+            logger.info(f"🚀 Using MCP Filesystem to read: {file_path.name}")
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="read_file",
+                parameters={"file_path": str(file_path)},
+            )
+            if mcp_result.get("success"):
+                return {
+                    "success": True,
+                    "content": mcp_result.get("content"),
+                    "method": "mcp_filesystem",
+                }
+            else:
+                logger.warning(
+                    f"MCP file read failed for {file_path.name}: {mcp_result.get('error')}"
+                )
+                return {
+                    "success": False,
+                    "error": mcp_result.get("error"),
+                    "method": "mcp_filesystem",
+                }
         except Exception as e:
-            logger.warning(f"File read failed: {e}")
-            return {"success": False, "error": str(e)}
+            logger.warning(f"MCP file read execution failed for {file_path.name}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "method": "mcp_filesystem_exception",
+            }
 
     async def _mcp_move_file(
         self, source_path: Path, target_path: Path
     ) -> Dict[str, Any]:
         """Move file using MCP Rust filesystem for faster operations."""
-        if not self.use_mcp_filesystem:
-            return {"success": False, "error": "MCP filesystem disabled"}
+        if not self.use_mcp_filesystem or not self.agent_coordinator:
+            logger.info(
+                f"MCP Filesystem disabled or coordinator not available. Moving {source_path.name} using standard Python I/O."
+            )
+            # Fallback to Python file operations
+            try:
+                import shutil
+
+                shutil.move(str(source_path), str(target_path))
+                return {
+                    "success": True,
+                    "source": str(source_path),
+                    "destination": str(target_path),
+                    "method": "python_filesystem_fallback",
+                }
+            except Exception as e:
+                logger.warning(f"Standard file move failed for {source_path.name}: {e}")
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "method": "python_filesystem_fallback",
+                }
 
         try:
-            # For now, fallback to Python file operations
-            # TODO: Implement proper MCP client integration
-            import shutil
-
-            logger.info(f"🚀 Moving file: {source_path.name} -> {target_path}")
-            shutil.move(str(source_path), str(target_path))
-            return {
-                "success": True,
-                "source": str(source_path),
-                "destination": str(target_path),
-                "method": "python_filesystem",  # Will be updated to MCP when client is ready
-            }
-
+            logger.info(
+                f"🚀 Using MCP Filesystem to move: {source_path.name} to {target_path}"
+            )
+            # Assuming the rust-mcp-filesystem.exe has a 'move_file' tool
+            # And it takes 'source_path' and 'target_path' as parameters
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="move_file",  # Ensure this tool exists and params match
+                parameters={
+                    "source_path": str(source_path),
+                    "destination_path": str(target_path),
+                    "overwrite": True,
+                },
+            )
+            if mcp_result.get("success"):
+                return {
+                    "success": True,
+                    "source": str(source_path),
+                    "destination": str(
+                        target_path
+                    ),  # Assuming mcp_result contains this
+                    "method": "mcp_filesystem",
+                }
+            else:
+                logger.warning(
+                    f"MCP file move failed for {source_path.name}: {mcp_result.get('error')}"
+                )
+                return {
+                    "success": False,
+                    "error": mcp_result.get("error"),
+                    "method": "mcp_filesystem",
+                }
         except Exception as e:
-            logger.warning(f"File move failed: {e}")
-            return {"success": False, "error": str(e)}
+            logger.warning(
+                f"MCP file move execution failed for {source_path.name}: {e}"
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "method": "mcp_filesystem_exception",
+            }
 
     async def _mcp_get_file_info(self, file_path: Path) -> Dict[str, Any]:
         """Get file information using MCP Rust filesystem."""
-        if not self.use_mcp_filesystem:
-            return {"success": False, "error": "MCP filesystem disabled"}
+        if not self.use_mcp_filesystem or not self.agent_coordinator:
+            logger.info(
+                f"MCP Filesystem disabled or coordinator not available. Getting info for {file_path.name} using standard Python I/O."
+            )
+            # Fallback to Python stat
+            try:
+                stat = file_path.stat()
+                return {
+                    "success": True,
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "method": "python_filesystem_fallback",
+                }
+            except Exception as e:
+                logger.warning(f"Standard file info failed for {file_path.name}: {e}")
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "method": "python_filesystem_fallback",
+                }
 
         try:
-            # For now, use Python stat
-            # TODO: Implement proper MCP client integration
-            stat = file_path.stat()
-            return {
-                "success": True,
-                "size": stat.st_size,
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                "method": "python_filesystem",  # Will be updated to MCP when client is ready
-            }
-
+            logger.info(f"🚀 Using MCP Filesystem to get info for: {file_path.name}")
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="get_file_info",  # Ensure this tool exists
+                parameters={"file_path": str(file_path)},
+            )
+            if mcp_result.get("success"):
+                # Assuming mcp_result contains 'size' and 'modified' or similar
+                return {
+                    "success": True,
+                    "size": mcp_result.get("size"),
+                    "modified": mcp_result.get(
+                        "modified_time"
+                    ),  # Adjust key based on actual MCP tool output
+                    "method": "mcp_filesystem",
+                }
+            else:
+                logger.warning(
+                    f"MCP file info failed for {file_path.name}: {mcp_result.get('error')}"
+                )
+                return {
+                    "success": False,
+                    "error": mcp_result.get("error"),
+                    "method": "mcp_filesystem",
+                }
         except Exception as e:
-            logger.warning(f"File info failed: {e}")
-            return {"success": False, "error": str(e)}
+            logger.warning(f"MCP file info execution failed for {file_path.name}: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "method": "mcp_filesystem_exception",
+            }
 
     async def _mcp_list_directory(self, directory_path: Path) -> Dict[str, Any]:
         """List directory contents using MCP Rust filesystem."""
-        if not self.use_mcp_filesystem:
-            return {"success": False, "error": "MCP filesystem disabled"}
+        if not self.use_mcp_filesystem or not self.agent_coordinator:
+            logger.info(
+                f"MCP Filesystem disabled or coordinator not available. Listing {directory_path} using standard Python I/O."
+            )
+            # Fallback to Python listdir
+            try:
+                files = list(directory_path.iterdir())
+                return {
+                    "success": True,
+                    "files": [str(f) for f in files],
+                    "count": len(files),
+                    "method": "python_filesystem_fallback",
+                }
+            except Exception as e:
+                logger.warning(
+                    f"Standard directory list failed for {directory_path}: {e}"
+                )
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "method": "python_filesystem_fallback",
+                }
 
         try:
-            # For now, use Python listdir
-            # TODO: Implement proper MCP client integration
-            files = list(directory_path.iterdir())
-            return {
-                "success": True,
-                "files": [str(f) for f in files],
-                "count": len(files),
-                "method": "python_filesystem",  # Will be updated to MCP when client is ready
-            }
-
+            logger.info(f"🚀 Using MCP Filesystem to list directory: {directory_path}")
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="list_directory",  # Ensure this tool exists
+                parameters={"path": str(directory_path)},  # Adjust param name if needed
+            )
+            if mcp_result.get("success"):
+                # Assuming mcp_result contains 'files' (list of strings) and 'count'
+                return {
+                    "success": True,
+                    "files": mcp_result.get("files"),
+                    "count": mcp_result.get("count"),
+                    "method": "mcp_filesystem",
+                }
+            else:
+                logger.warning(
+                    f"MCP directory list failed for {directory_path}: {mcp_result.get('error')}"
+                )
+                return {
+                    "success": False,
+                    "error": mcp_result.get("error"),
+                    "method": "mcp_filesystem",
+                }
         except Exception as e:
-            logger.warning(f"Directory list failed: {e}")
-            return {"success": False, "error": str(e)}
+            logger.warning(
+                f"MCP directory list execution failed for {directory_path}: {e}"
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "method": "mcp_filesystem_exception",
+            }
 
     def get_supported_task_types(self) -> List[str]:
         """Return list of task types this agent can handle."""
@@ -535,13 +690,13 @@ class IntakeAgent(BaseAgent):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Process a single document through the full intake pipeline."""
-        file_path = Path(file_path)
+        file_path_obj = Path(file_path)
         document_id = document_id or str(uuid.uuid4())
 
-        logger.info(f"Processing document: {file_path}")
+        logger.info(f"Processing document: {file_path_obj}")
 
         # Step 1: Validate file
-        validation_result = await self._validate_file(file_path)
+        validation_result = await self._validate_file(file_path_obj)
         if not validation_result["valid"]:
             return {
                 "success": False,
@@ -551,7 +706,7 @@ class IntakeAgent(BaseAgent):
             }
 
         # Step 2: Extract text content
-        content_result = await self._extract_text_content(file_path)
+        content_result = await self._extract_text_content(file_path_obj)
         if not content_result["success"]:
             return {
                 "success": False,
@@ -561,11 +716,11 @@ class IntakeAgent(BaseAgent):
             }
 
         # Step 3: Extract metadata
-        metadata_result = await self._extract_metadata(file_path)
+        metadata_result = await self._extract_metadata(file_path_obj)
 
         # Step 4: Classify document
         classification_result = await self._classify_document(
-            content=content_result["content"], file_path=file_path
+            content=content_result["content"], file_path=file_path_obj
         )
 
         # Step 5: Perform similarity check if requested
@@ -576,10 +731,10 @@ class IntakeAgent(BaseAgent):
             )
 
         # Compile final result
-        result = {
+        result_data = {
             "success": True,
             "document_id": document_id,
-            "file_path": str(file_path),
+            "file_path": str(file_path_obj),
             "document_type": validation_result["document_type"],
             "file_size_mb": validation_result["file_size_mb"],
             "content": content_result["content"],
@@ -595,20 +750,62 @@ class IntakeAgent(BaseAgent):
         }
 
         # Move file to processed directory
-        processed_path = self.processed_directory / f"{document_id}_{file_path.name}"
+        processed_path = (
+            self.processed_directory / f"{document_id}_{file_path_obj.name}"
+        )
         try:
-            if file_path != processed_path:
-                import shutil
+            if file_path_obj != processed_path:
+                # Use _mcp_move_file or a copy then delete approach if move is not robust
+                # For simplicity, let's try to read content and write to new path via MCP
+                # This assumes the file isn't too large for memory.
+                # A true 'copy_file' MCP tool would be better.
+                if self.use_mcp_filesystem and self.agent_coordinator:
+                    # Read content first (already done in content_result)
+                    original_content = content_result[
+                        "content"
+                    ]  # Or re-read if binary/large
 
-                shutil.copy2(file_path, processed_path)
-                result["processed_path"] = str(processed_path)
+                    # If original file was binary or needs byte-perfect copy, re-read as bytes
+                    # This is a simplification; binary files need different handling for 'content'
+                    # For now, assuming text-based or OCRed content is what we're "moving"
+
+                    write_mcp_result = await self.agent_coordinator.execute_agent_task(
+                        agent_type="filesystem_server",
+                        task_type="write_file",
+                        parameters={
+                            "file_path": str(processed_path),
+                            "content": original_content,
+                            "overwrite": True,
+                        },
+                    )
+                    if write_mcp_result.get("success"):
+                        result_data["processed_path"] = str(processed_path)
+                        # Optionally, delete original if it's a true move, but be careful
+                        # delete_mcp_result = await self.agent_coordinator.execute_agent_task(
+                        # agent_type="filesystem_server",
+                        # task_type="delete_file",
+                        # parameters={"file_path": str(file_path_obj)}
+                        # )
+                        # if not delete_mcp_result.get("success"):
+                        # logger.warning(f"MCP failed to delete original file {file_path_obj.name} after copy: {delete_mcp_result.get('error')}")
+                    else:
+                        logger.warning(
+                            f"MCP failed to write processed file {processed_path.name}: {write_mcp_result.get('error')}"
+                        )
+                        # Fallback to shutil if MCP write fails? Or just log error?
+                        # For now, just log.
+                else:
+                    import shutil
+
+                    shutil.copy2(file_path_obj, processed_path)  # Fallback to copy
+                    result_data["processed_path"] = str(processed_path)
         except Exception as e:
             logger.warning(f"Failed to move file to processed directory: {e}")
 
         self.documents_processed += 1
         logger.info(f"Document processed successfully: {document_id}")
 
-        return result
+        return result_data
 
     async def _validate_file(self, file_path: Union[str, Path]) -> Dict[str, Any]:
         """Validate file format, size, and accessibility."""

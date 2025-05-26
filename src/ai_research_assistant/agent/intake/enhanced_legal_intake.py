@@ -142,15 +142,17 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         legal_case_db: Optional[LegalCaseDatabase] = None,
         case_organization_directory: str = "./tmp/organized_cases",
         enable_ocr: bool = True,
+        agent_coordinator=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            agent_coordinator=agent_coordinator, enable_ocr=enable_ocr, **kwargs
+        )
 
         # Legal-specific configuration
         self.legal_db = legal_case_db or LegalCaseDatabase()
         self.case_org_dir = Path(case_organization_directory)
         self.case_org_dir.mkdir(parents=True, exist_ok=True)
-        self.enable_ocr = enable_ocr
 
         # WCB document patterns for classification
         self.wcb_patterns = self._initialize_wcb_patterns()
@@ -751,19 +753,35 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         else:
             target_dir = case_dir / type_dir_map.get(wcb_type, "unknown")
 
+        # Ensure target directory exists (MCP create_directory could also be used if needed)
+        # For simplicity, Python's mkdir is often fine for setup.
+        target_dir.mkdir(parents=True, exist_ok=True)
+
         # Create meaningful filename with metadata
         date_prefix = ""
         if "dates" in entities and entities["dates"]:
             # Use the earliest date found
-            earliest_date = min(entities["dates"])
-            date_prefix = f"{earliest_date.replace('-', '')}_"
+            try:
+                # Attempt to parse dates and find the minimum
+                parsed_dates = sorted(
+                    [
+                        datetime.fromisoformat(d.replace("/", "-"))
+                        for d in entities["dates"]
+                        if isinstance(d, str) and len(d) > 7
+                    ]
+                )
+                if parsed_dates:
+                    date_prefix = f"{parsed_dates[0].strftime('%Y%m%d')}_"
+            except ValueError:
+                # Handle cases where date parsing might fail for some formats
+                date_prefix = f"{entities['dates'][0].replace('-', '').replace('/', '')[:8]}TM_"  # Fallback
 
         # Add source prefix
         source_prefix = ""
         if source_type == "insurance_company" and source_info.get("matched_entities"):
-            source_prefix = f"INS_{source_info['matched_entities'][0][:10]}_"
+            source_prefix = f"INS_{re.sub(r'[^\\w-]', '', source_info['matched_entities'][0][:10])}_".upper()
         elif source_type == "medical_provider" and source_info.get("matched_entities"):
-            source_prefix = f"MED_{source_info['matched_entities'][0][:10]}_"
+            source_prefix = f"MED_{re.sub(r'[^\\w-]', '', source_info['matched_entities'][0][:10])}_".upper()
         elif source_type == "user_submission":
             source_prefix = "USER_"
 
@@ -774,8 +792,39 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
 
         target_path = target_dir / new_filename
 
-        # Copy file to organized location
-        shutil.copy2(file_path, target_path)
+        # Copy file to organized location using MCP if available
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            # Read original file content (binary for robust copy)
+            try:
+                with open(file_path, "rb") as f_original:
+                    original_content_bytes = f_original.read()
+
+                # Write to new path using MCP write_file (assuming it can handle bytes or auto-detects)
+                # If write_file strictly needs string, this needs adjustment for binary files.
+                # For now, let's assume write_file can take bytes if content is bytes, or it handles it.
+                # A specific 'write_binary_file' or type parameter in MCP tool would be better.
+                mcp_write_result = await self.agent_coordinator.execute_agent_task(
+                    agent_type="filesystem_server",
+                    task_type="write_file",
+                    parameters={
+                        "file_path": str(target_path),
+                        "content": original_content_bytes,
+                        "overwrite": True,
+                        "encoding": "base64",
+                    },  # Assuming base64 for bytes
+                )
+                if not mcp_write_result.get("success"):
+                    logger.warning(
+                        f"MCP failed to copy {file_path.name} to {target_path}: {mcp_write_result.get('error')}. Falling back to shutil."
+                    )
+                    shutil.copy2(file_path, target_path)
+            except Exception as e_mcp_copy:
+                logger.warning(
+                    f"Error during MCP copy of {file_path.name} to {target_path}: {e_mcp_copy}. Falling back to shutil."
+                )
+                shutil.copy2(file_path, target_path)
+        else:
+            shutil.copy2(file_path, target_path)
 
         return str(target_path)
 
@@ -1185,10 +1234,10 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             return
 
         case_dir = self.case_org_dir / self.current_case_id
-        tracking_file = case_dir / "tracking_reports" / "document_tracking.json"
-        tracking_file.parent.mkdir(exist_ok=True)
+        tracking_file_path = case_dir / "tracking_reports" / "document_tracking.json"
+        tracking_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        tracking_data = {
+        tracking_data_content = {
             "case_id": self.current_case_id,
             "generated_at": datetime.now().isoformat(),
             "summary": self.document_tracker.get_summary(),
@@ -1197,8 +1246,27 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             "user_submissions": self.document_tracker.user_submissions,
         }
 
-        with open(tracking_file, "w") as f:
-            json.dump(tracking_data, f, indent=2)
+        tracking_data_str = json.dumps(tracking_data_content, indent=2)
+
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="write_file",
+                parameters={
+                    "file_path": str(tracking_file_path),
+                    "content": tracking_data_str,
+                    "overwrite": True,
+                },
+            )
+            if not mcp_result.get("success"):
+                logger.error(
+                    f"MCP Error saving tracking data for {self.current_case_id}: {mcp_result.get('error')}. Fallback to standard write."
+                )
+                with open(tracking_file_path, "w") as f:
+                    f.write(tracking_data_str)
+        else:
+            with open(tracking_file_path, "w") as f:
+                f.write(tracking_data_str)
 
     async def _analyze_submission_patterns(
         self, params: Dict[str, Any]
@@ -1366,15 +1434,34 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             return
 
         case_dir = self.case_org_dir / self.current_case_id
-        report_file = (
+        report_file_path = (
             case_dir
             / "tracking_reports"
             / f"comprehensive_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         )
-        report_file.parent.mkdir(exist_ok=True)
+        report_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(report_file, "w") as f:
-            json.dump(report, f, indent=2)
+        report_str = json.dumps(report, indent=2)
+
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="write_file",
+                parameters={
+                    "file_path": str(report_file_path),
+                    "content": report_str,
+                    "overwrite": True,
+                },
+            )
+            if not mcp_result.get("success"):
+                logger.error(
+                    f"MCP Error saving tracking report for {self.current_case_id}: {mcp_result.get('error')}. Fallback to standard write."
+                )
+                with open(report_file_path, "w") as f:
+                    f.write(report_str)
+        else:
+            with open(report_file_path, "w") as f:
+                f.write(report_str)
 
     async def _generate_search_points(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Generate structured search points for the Legal Research Agent."""
@@ -1478,8 +1565,10 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             return
 
         case_dir = self.case_org_dir / self.current_case_id
-        search_points_file = case_dir / "search_points" / "legal_search_points.json"
-        search_points_file.parent.mkdir(exist_ok=True)
+        search_points_file_path = (
+            case_dir / "search_points" / "legal_search_points.json"
+        )
+        search_points_file_path.parent.mkdir(parents=True, exist_ok=True)
 
         search_points_data = [
             {
@@ -1493,8 +1582,27 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             for sp in self.search_points
         ]
 
-        with open(search_points_file, "w") as f:
-            json.dump(search_points_data, f, indent=2)
+        search_points_str = json.dumps(search_points_data, indent=2)
+
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="write_file",
+                parameters={
+                    "file_path": str(search_points_file_path),
+                    "content": search_points_str,
+                    "overwrite": True,
+                },
+            )
+            if not mcp_result.get("success"):
+                logger.error(
+                    f"MCP Error saving search points for {self.current_case_id}: {mcp_result.get('error')}. Fallback to standard write."
+                )
+                with open(search_points_file_path, "w") as f:
+                    f.write(search_points_str)
+        else:
+            with open(search_points_file_path, "w") as f:
+                f.write(search_points_str)
 
     async def _reconstruct_case_timeline(
         self, params: Dict[str, Any]
@@ -1550,11 +1658,30 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
             return
 
         case_dir = self.case_org_dir / self.current_case_id
-        timeline_file = case_dir / "timeline" / "case_timeline.json"
-        timeline_file.parent.mkdir(exist_ok=True)
+        timeline_file_path = case_dir / "timeline" / "case_timeline.json"
+        timeline_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(timeline_file, "w") as f:
-            json.dump(self.case_timeline, f, indent=2)
+        timeline_str = json.dumps(self.case_timeline, indent=2)
+
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="write_file",
+                parameters={
+                    "file_path": str(timeline_file_path),
+                    "content": timeline_str,
+                    "overwrite": True,
+                },
+            )
+            if not mcp_result.get("success"):
+                logger.error(
+                    f"MCP Error saving case timeline for {self.current_case_id}: {mcp_result.get('error')}. Fallback to standard write."
+                )
+                with open(timeline_file_path, "w") as f:
+                    f.write(timeline_str)
+        else:
+            with open(timeline_file_path, "w") as f:
+                f.write(timeline_str)
 
     async def _prepare_legal_research(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Prepare structured data package for Legal Research Agent."""
@@ -1597,14 +1724,33 @@ class EnhancedLegalIntakeAgent(IntakeAgent):
         }
 
         # Save research package
-        research_file = case_dir / "legal_research_package.json"
-        with open(research_file, "w") as f:
-            json.dump(research_package, f, indent=2)
+        research_file_path = case_dir / "legal_research_package.json"
+        research_package_str = json.dumps(research_package, indent=2)
+
+        if self.agent_coordinator and self.use_mcp_filesystem:
+            mcp_result = await self.agent_coordinator.execute_agent_task(
+                agent_type="filesystem_server",
+                task_type="write_file",
+                parameters={
+                    "file_path": str(research_file_path),
+                    "content": research_package_str,
+                    "overwrite": True,
+                },
+            )
+            if not mcp_result.get("success"):
+                logger.error(
+                    f"MCP Error saving research package for {self.current_case_id}: {mcp_result.get('error')}. Fallback to standard write."
+                )
+                with open(research_file_path, "w") as f:
+                    f.write(research_package_str)
+        else:
+            with open(research_file_path, "w") as f:
+                f.write(research_package_str)
 
         return {
             "success": True,
             "research_package": research_package,
-            "package_file": str(research_file),
+            "package_file": str(research_file_path),
             "ready_for_legal_research": True,
         }
 

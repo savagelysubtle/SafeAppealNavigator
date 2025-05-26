@@ -84,7 +84,7 @@ class LegalOrchestratorAgent(BaseAgent):
         super().__init__(
             agent_id=kwargs.get("agent_id")
             or f"legal_orchestrator_{uuid.uuid4().hex[:8]}",
-            config=agent_config or AgentConfig(),
+            config=agent_config or AgentConfig(system_prompt=None),
             global_settings_manager=global_settings_manager,
             **kwargs,
         )
@@ -335,7 +335,7 @@ class LegalOrchestratorAgent(BaseAgent):
 
         # Get current workflow context
         workflow_state = await self.workflow_manager.get_workflow_state(
-            self.active_workflow_id
+            self.active_workflow_id  # type: ignore
         )
 
         # Process chat message with context
@@ -399,7 +399,9 @@ class LegalOrchestratorAgent(BaseAgent):
                 "error": "No workflow ID provided or active workflow",
             }
 
-        # At this point, current_workflow_id is guaranteed to be a str
+        assert current_workflow_id is not None, (
+            "Workflow ID cannot be None here after the check"
+        )
         workflow_state = await self.workflow_manager.get_workflow_state(
             current_workflow_id
         )
