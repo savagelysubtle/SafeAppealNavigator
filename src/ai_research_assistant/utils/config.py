@@ -27,10 +27,9 @@ DEFAULT_MODELS = {
         "max_tokens": 2048,
     },
     "google": {
-        "model": "gemini-2.5-flash-preview-04-17",
+        "model": "	gemini-2.5-pro-preview-05-06",
         "temperature": 0.0,
         "max_tokens": 2048,
-        "note": "Using April version due to MCP tool compatibility issues with 05-20 version",
     },
     "mistral": {
         "model": "mistral-large-latest",

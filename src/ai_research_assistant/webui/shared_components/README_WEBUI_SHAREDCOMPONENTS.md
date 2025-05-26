@@ -1,60 +1,91 @@
 # `webui/shared_components/` Module: Guide
 
-This document provides guidelines for using and creating reusable UI components within the `src/ai_research_assistant/webui/shared_components/` directory.
+This document explains the `shared_components/` subdirectory within the `src/ai_research_assistant/webui/` module. It details the purpose of shared UI components and how to use existing ones or contribute new ones.
 
 ## Purpose
 
-The `shared_components/` directory is dedicated to housing UI elements that are generic enough to be reused across multiple pages or tabs within the WebUI. This promotes consistency, reduces code duplication, and simplifies maintenance.
+The `shared_components/` directory houses reusable Gradio UI components that can be utilized across multiple pages or tabs within the AI Research Assistant web interface. The goal is to promote consistency, reduce code duplication, and simplify the development of new UI sections.
 
-Examples from the `AllBeAllUIPlan.md` include:
--   `CollapsibleCard.py`
--   `RateLimitSlider.py`
--   `ToolCard.py` (for the MCP Marketplace)
+These components are designed to align with the overall UI refactor plan (`plans/WUI/AllBeAllUIPlan.md`) and adhere to the defined design system and architectural patterns.
 
-## Using Existing Shared Components
+## Available Components
 
-1.  **Identify Need**: Determine if an existing shared component meets your UI requirement.
-2.  **Import**: Import the component's class or creation function from its module within `shared_components/` into your page view (`*_view.py`) or content tab (`*_tab.py`) file.
+Below is a list of available shared components, their purpose, and basic usage examples.
+
+### 1. `CollapsibleCard`
+
+-   **File**: `collapsible_card.py`
+-   **Purpose**: Provides a card-like container with a clickable header that expands or collapses to show/hide its content. Useful for organizing complex forms or sections with optional details.
+-   **Key Features**:
+    -   Customizable title and icon.
+    -   Option to be open or closed by default.
+    -   Integrates with Gradio's layout system.
+-   **Basic Usage**:
     ```python
-    from src.ai_research_assistant.webui.shared_components.collapsible_card import CollapsibleCard
+    from src.ai_research_assistant.webui.shared_components import CollapsibleCard
+
+    with CollapsibleCard(title="My Section", icon="⚙️", open_by_default=True):
+        gr.Markdown("Content inside the collapsible card.")
+        gr.Textbox(label="My Setting")
     ```
-3.  **Instantiate/Use**: Create an instance of the component, passing any necessary parameters. Shared components might require the `webui_manager` if they need to interact with global state or other registered UI elements.
+
+### 2. `RateLimitSlider`
+
+-   **File**: `rate_limit_slider.py`
+-   **Purpose**: An enhanced slider for configuring requests per minute (RPM) for API providers. It includes a visual display for the current RPM and a placeholder for a timer/status.
+-   **Key Features**:
+    -   Customizable provider name, default RPM, min/max RPM.
+    -   Displays current RPM and intended seconds per request.
+    -   Includes a status label (e.g., "Ready", "Limited").
+    -   Designed to integrate with `WebuiManager` for real-time status updates (requires `gr.every` polling in the main UI for live timer).
+-   **Basic Usage**:
     ```python
-    with CollapsibleCard(title="My Reusable Section", icon="⚙️", webui_manager=webui_manager):
-        gr.Markdown("This content is inside a shared collapsible card.")
+    from src.ai_research_assistant.webui.shared_components import RateLimitSlider
+
+    # webui_manager would typically be passed if available in the context
+    RateLimitSlider(provider_name="My API Provider", default_rpm=30)
     ```
-4.  **Consult Component Docstrings**: Each shared component file should contain clear docstrings explaining its purpose, parameters, expected behavior, and usage examples. Always refer to these for specific instructions.
 
-## Creating New Shared Components
+### 3. `ToolCard`
 
-If you develop a UI pattern or widget that you anticipate will be used in multiple distinct parts of the application and is not logically tied to a single page's specific functionality, it's a good candidate for a shared component.
+-   **File**: `tool_card.py`
+-   **Purpose**: Displays information about an individual tool (e.g., from an MCP Tool Marketplace) and provides action buttons like Install, Configure, Run, or Uninstall.
+-   **Key Features**:
+    -   Displays tool name, icon, description, version, author, and tags from metadata.
+    -   Shows a status badge (e.g., "Installed", "Not Installed").
+    -   Conditionally shows action buttons based on tool status.
+-   **Basic Usage**:
+    ```python
+    from src.ai_research_assistant.webui.shared_components import ToolCard
 
-1.  **Design for Reusability**:
-    -   Ensure the component has a clear, well-defined interface (parameters).
-    -   Make it configurable to adapt to different contexts where it might be used.
-    -   Avoid hardcoding values that should be parameters.
+    tool_meta = {
+        "name": "My Awesome Tool", "icon": "🚀",
+        "description": "This tool does awesome things.",
+        "version": "1.0", "status": "not_installed", "author": "Dev Team"
+    }
+    ToolCard(tool_metadata=tool_meta)
+    ```
 
-2.  **Create File**: Add a new Python file to the `src/ai_research_assistant/webui/shared_components/` directory (e.g., `my_new_widget.py`).
+## How to Use Shared Components
 
-3.  **Implement Component Logic**:
-    -   Typically, define the component as a Python class that inherits from a base Gradio component (e.g., `gr.Group`, `gr.Column`, `gr.HTML`) or as a function that creates and returns a configured set of Gradio components.
-    -   If the component needs access to global UI state or needs to trigger actions on other parts of the UI, accept an instance of `WebuiManager` as a parameter in its constructor or creation function.
+1.  **Import**: Import the desired component from `src.ai_research_assistant.webui.shared_components` into your page or tab module.
+2.  **Instantiate**: Create an instance of the component, passing any required arguments (like `title` for `CollapsibleCard` or `tool_metadata` for `ToolCard`).
+3.  **Integrate**: Place the component within your Gradio layout (e.g., inside `gr.Column`, `gr.Row`, `gr.TabItem`).
+4.  **Event Handling**: If the component has interactive elements (like buttons in `ToolCard`), connect their event handlers (`.click()`, `.change()`, etc.) to your controller logic or `WebuiManager` methods as needed.
 
-4.  **Write Comprehensive Docstrings**:
-    -   Clearly explain what the component does.
-    -   List all parameters, their types, and their purpose.
-    -   Provide simple usage examples.
-    -   Mention any dependencies or important considerations.
+## Contributing New Shared Components
 
-5.  **Consider Abstraction**: If the component involves complex logic or multiple sub-elements, ensure it presents a clean and simple API to the modules that will use it.
+1.  **Identify Need**: Determine if a UI element or pattern is likely to be reused in multiple places.
+2.  **Design**: Follow the design tokens and patterns in `AllBeAllUIPlan.md` and related UI architecture rules.
+3.  **Implement**: Create a new Python file in the `shared_components/` directory for your component. It should typically inherit from a Gradio class (e.g., `gr.Group`, `gr.Column`).
+4.  **Document**: Add your new component to this README, explaining its purpose, features, and providing a basic usage example.
+5.  **Export**: Add your component to `src/ai_research_assistant/webui/shared_components/__init__.py` to make it easily importable.
+6.  **Test**: Create a simple `if __name__ == "__main__":` block in your component's file for standalone testing with `gr.Blocks().launch()`.
 
-6.  **Update Documentation (If Necessary)**:
-    -   If the new shared component represents a significant or widely applicable UI pattern, consider mentioning it in the main `README_WEBUI_OVERVIEW.md` or the `AllBeAllUIPlan.md`.
-    -   Ensure the `webui-development-context.mdc` rule is updated if the component becomes a standard part of the architecture.
+## Styling
 
-## Theming and Layout
+-   Shared components should aim for a consistent look and feel by using design tokens and global CSS variables defined in `static/modern-ui.css`.
+-   Use `elem_id` and `elem_classes` parameters in Gradio components for applying custom styles when necessary.
 
--   Shared components should generally adhere to the global theme (see `README_WEBUI_THEME.md`) and CSS (`static/modern-ui.css`).
--   They can accept parameters to allow for minor layout or style variations where needed, but overarching look-and-feel should be consistent with the rest of the application.
-
-By centralizing reusable UI elements in `shared_components/`, we can build a more modular, consistent, and maintainable WebUI.
+For the overall WebUI structure, refer to `README_WEBUI_OVERVIEW.md`.
+For details on page creation, refer to `pages/README_WEBUI_PAGES.md`.
