@@ -1,240 +1,189 @@
 """
-Main WebUI Interface for AI Research Assistant
-
-Updated to include unified global settings panel that consolidates
-all LLM configurations previously scattered across multiple tabs.
+Main WebUI Interface for AI Research Assistant - Refactored for Vertical Navigation
 """
 
-import gradio as gr
-import gradio.themes as themes
+import logging
 
-from .components.agent_settings_tab import create_agent_settings_tab
-from .components.browser_launch_tab import create_browser_launch_tab
-from .components.browser_settings_tab import create_browser_settings_tab
-from .components.browser_use_agent_tab import create_browser_use_agent_tab
-from .components.collector_agent_tab import create_collector_agent_tab
-from .components.cross_reference_agent_tab import create_cross_reference_agent_tab
-from .components.database_maintenance_agent_tab import (
-    create_database_maintenance_agent_tab,
+import gradio as gr
+
+from .navigation.navigation_rail import NavigationRail
+from .pages import (
+    create_interactive_chat_page,
+    create_orchestrator_page,
+    create_settings_page,
+    create_tools_page,
 )
-from .components.deep_research_agent_tab import create_deep_research_agent_tab
-from .components.global_settings_panel import create_global_settings_panel
-from .components.intake_agent_tab import create_intake_agent_tab
-from .components.interactive_chat_tab import create_interactive_chat_tab
-from .components.legal_research_tab import create_legal_research_tab
-from .components.load_save_config_tab import create_load_save_config_tab
-from .components.mcp_server_tab import create_mcp_server_tab
-from .components.orchestrator_tab import create_orchestrator_tab
-from .components.search_agent_tab import create_search_agent_tab
 from .webui_manager import WebuiManager
 
-theme_map = {
-    "Default": themes.Default(),
-    "Soft": themes.Soft(),
-    "Monochrome": themes.Monochrome(),
-    "Glass": themes.Glass(),
-    "Origin": themes.Origin(),
-    "Citrus": themes.Citrus(),
-    "Ocean": themes.Ocean(),
-    "Base": themes.Base(),
+# Import shared components if they are to be used directly here, otherwise pages manage them
+# from .shared_components.collapsible_card import CollapsibleCard
+
+logger = logging.getLogger(__name__)
+
+# Define a mapping from page_id to page creation functions
+PAGE_REGISTRY = {
+    "orchestrator_page": create_orchestrator_page,
+    "browser_agent_page": lambda wm: gr.Markdown(
+        "## Browser Agent Page Content (Placeholder)"
+    ),  # Placeholder
+    "deep_research_page": lambda wm: gr.Markdown(
+        "## Deep Research Page Content (Placeholder)"
+    ),  # Placeholder
+    "search_agent_page": lambda wm: gr.Markdown(
+        "## Search Agent Page Content (Placeholder)"
+    ),  # Placeholder
+    "intake_agent_page": lambda wm: gr.Markdown(
+        "## Intake Agent Page Content (Placeholder)"
+    ),  # Placeholder
+    "legal_research_page": lambda wm: gr.Markdown(
+        "## Legal Research Page Content (Placeholder)"
+    ),  # Placeholder
+    "collector_agent_page": lambda wm: gr.Markdown(
+        "## Collector Agent Page Content (Placeholder)"
+    ),  # Placeholder
+    "cross_reference_page": lambda wm: gr.Markdown(
+        "## Cross Reference Page Content (Placeholder)"
+    ),  # Placeholder
+    "interactive_chat_page": create_interactive_chat_page,
+    "tools_page": create_tools_page,
+    "settings_page": create_settings_page,
 }
 
 
 def create_ui(theme_name="Ocean"):
-    """
-    Create the main WebUI interface with unified global settings.
-
-    The interface now features:
-    1. Global Settings Panel (collapsible) - at the top for easy access
-    2. All agent tabs below - simplified without duplicate LLM settings
-    """
-    # Initialize WebUI Manager
     webui_manager = WebuiManager()
+    navigation_rail = NavigationRail(webui_manager, default_page_id="orchestrator_page")
 
-    # Initialize chat manager for cross-component communication
-    webui_manager.init_interactive_chat()
-
-    # Create the main interface
     with gr.Blocks(
-        theme=theme_name,
-        title="🧠 AI Research Assistant - Unified Settings",
+        theme=theme_name,  # TODO: Integrate ModernDarkTheme from AllBeAllUIPlan
+        title="🚀 AI Research Assistant - Vertical Nav",
         css="""
-        .global-settings-panel {
-            border: 2px solid #4a90e2;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-        }
-        .agent-tabs {
-            margin-top: 10px;
-        }
-        .status-indicator {
-            font-weight: bold;
-            padding: 8px;
-            border-radius: 4px;
-        }
-        .status-success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .status-warning {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        .status-error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
+            /* Basic CSS for 3-column layout - to be refined in modern-ui.css */
+            .main-container { display: flex; flex-direction: row; height: 100vh; }
+            .navigation-rail-container { width: 220px; border-right: 1px solid #ccc; overflow-y: auto; padding: 10px; background-color: #f9f9f9; }
+            .main-content-container { flex-grow: 1; padding: 20px; overflow-y: auto; }
+            .live-output-container { width: 300px; border-left: 1px solid #ccc; overflow-y: auto; padding: 10px; background-color: #f9f9f9; }
+            .nav-header { margin-bottom: 15px; }
+            .nav-button { margin-bottom: 5px !important; }
+            .nav-sub-button { margin-left: 15px; margin-bottom: 3px !important; }
+            .nav-group { margin-bottom: 10px !important; }
+            /* Add other global styles or link to modern-ui.css from static/ */
         """,
     ) as demo:
-        # Header
-        gr.Markdown("""
-        # 🧠 AI Research Assistant
-        ### Advanced WC-AT case research with AI-powered analysis and document generation
+        gr.Markdown("# 🚀 AI Research Assistant - New Interface")
 
-        **🎯 NEW: Legal Research Orchestrator** - Unified workflow management for complete case processing
-        **🌟 Phase 4 Complete:** All specialized agents now available - Intake, Search, Cross Reference, and Database Maintenance
-        **🌟 Unified Settings:** All LLM and system configurations are managed in the Global Settings panel below.
-        """)
+        # Hidden component to trigger page refreshes via event listeners
+        # This will hold the page_id to be loaded.
+        current_page_id_trigger = gr.Textbox(
+            value=navigation_rail.default_page_id, visible=False, label="currentPageID"
+        )
 
-        # Global Settings Panel (always visible at top)
-        with gr.Group(elem_classes="global-settings-panel"):
-            gr.Markdown("## 🌐 Unified Configuration Center")
-            global_settings_components, settings_manager = create_global_settings_panel(
-                webui_manager
-            )
+        with gr.Row(elem_classes="main-container"):
+            with gr.Column(
+                elem_id="navigation-rail-column",
+                elem_classes="navigation-rail-container",
+                scale=0,
+                min_width=220,
+            ):
+                nav_rail_ui_column = (
+                    navigation_rail.create_ui()
+                )  # This returns the gr.Column for the nav rail
 
-        # Agent Tabs (simplified without duplicate settings)
-        with gr.Tabs(elem_classes="agent-tabs") as main_tabs:
-            # Legal Research Orchestrator - PRIMARY WORKFLOW MANAGER
-            with gr.TabItem("🎯 Legal Orchestrator"):
-                gr.Markdown("""
-                **🌟 UNIFIED LEGAL WORKFLOW MANAGER**
-                *Complete case management from intake → research → analysis*
-                """)
-                create_orchestrator_tab(webui_manager)
+            with gr.Column(
+                elem_id="main-content-column",
+                elem_classes="main-content-container",
+                scale=3,
+            ) as main_content_area:
+                # Initial page load will be handled by the event listener below
+                gr.Markdown(
+                    "Welcome! Select an item from the navigation menu."
+                )  # Default placeholder
 
-            # Interactive Chat Tab - AI-POWERED LEGAL ASSISTANCE
-            with gr.TabItem("💬 Interactive Chat"):
-                gr.Markdown("""
-                **🤖 AI-POWERED LEGAL CONSULTATION**
-                *Document analysis, research guidance, and strategic assistance*
-                """)
-                create_interactive_chat_tab(webui_manager)
-
-            # Browser Use Agent Tab
-            with gr.TabItem("🌐 Browser Agent"):
-                gr.Markdown("""
-                **Browser automation with AI guidance**
-                *LLM settings managed in Global Settings panel above*
-                """)
-                create_browser_use_agent_tab(webui_manager)
-
-            # Deep Research Agent Tab
-            with gr.TabItem("🔍 Deep Research"):
-                gr.Markdown("""
-                **Comprehensive research with parallel processing**
-                *LLM settings managed in Global Settings panel above*
-                """)
-                create_deep_research_agent_tab(webui_manager)
-
-            # Legal Research Tab
-            with gr.TabItem("⚖️ Legal Research"):
-                gr.Markdown("""
-                **WC-AT case research and legal analysis**
-                *LLM settings managed in Global Settings panel above*
-                """)
-                create_legal_research_tab(webui_manager)
-
-            # Collector Agent Tab
-            with gr.TabItem("📊 Data Collector"):
-                gr.Markdown("""
-                **Automated data collection and organization**
-                *LLM settings managed in Global Settings panel above*
-                """)
-                create_collector_agent_tab(webui_manager)
-
-            # Phase 4 Agents - New Specialized Workflow Agents
-            with gr.TabItem("📥 Intake Agent"):
-                gr.Markdown("""
-                **Document intake and organization workflows**
-                *Enhanced Legal Intake for WCB case processing*
-                """)
-                create_intake_agent_tab(webui_manager)
-
-            with gr.TabItem("🔍 Search Agent"):
-                gr.Markdown("""
-                **Advanced search across multiple data sources**
-                *Semantic search and legal precedent discovery*
-                """)
-                create_search_agent_tab(webui_manager)
-
-            with gr.TabItem("🔗 Cross Reference"):
-                gr.Markdown("""
-                **Intelligent cross-referencing and relationship analysis**
-                *Document correlation and case relationship mapping*
-                """)
-                create_cross_reference_agent_tab(webui_manager)
-
-            with gr.TabItem("🔧 Database Maintenance"):
-                gr.Markdown("""
-                **System optimization and database health monitoring**
-                *Automated maintenance and performance analytics*
-                """)
-                create_database_maintenance_agent_tab(webui_manager)
-
-            # Configuration Management
-            with gr.TabItem("⚙️ Config Management"):
-                gr.Markdown("""
-                **Load, save, and manage configurations**
-                *Works with Global Settings above*
-                """)
-                create_load_save_config_tab(webui_manager)
-
-            # Advanced Settings (kept for specialized configs)
-            with gr.TabItem("🔧 Advanced Settings"):
-                with gr.Accordion("Legacy Agent Settings", open=False):
-                    gr.Markdown(
-                        "⚠️ **Deprecated:** Use Global Settings panel above instead"
-                    )
-                    create_agent_settings_tab(webui_manager)
-
-                with gr.Accordion("Browser Settings", open=True):
-                    create_browser_settings_tab(webui_manager)
-
-                with gr.Accordion("MCP Server Settings", open=False):
-                    create_mcp_server_tab(webui_manager)
-
-            # System Tools
-            with gr.TabItem("🚀 System Tools"):
-                gr.Markdown("""
-                **System utilities and browser management**
-                """)
-                create_browser_launch_tab(webui_manager)
-
-        # Status Footer
-        with gr.Row():
-            with gr.Column(scale=2):
-                gr.Markdown("""
-                **💡 Tips:**
-                - **🎯 START HERE:** Use Legal Orchestrator tab for complete case workflows
-                - Configure all LLM settings in the Global Settings panel above
-                - Settings automatically sync to all agents
-                - Use Config Management tab to save/load your preferred setups
-                - **Phase 4 Agents:** Use Intake → Search → Cross Reference → Database Maintenance for complete workflows
-                - Enhanced Legal Intake automates WCB case file organization and analysis
-                """)
-
-            with gr.Column(scale=1):
-                global_status = gr.Textbox(
-                    label="🌐 Global Status",
-                    value="✅ Unified settings system active",
+            with gr.Column(
+                elem_id="live-output-column",
+                elem_classes="live-output-container",
+                scale=1,
+                min_width=300,
+                visible=True,
+            ) as live_output_area:
+                gr.Markdown("### 📢 Live Output Panel")
+                gr.Textbox(
+                    "Agent activity and logs will appear here...",
+                    lines=20,
                     interactive=False,
-                    elem_classes="status-indicator status-success",
                 )
 
-        # Store global status component for updates
-        webui_manager.add_components("global_status", {"status": global_status})
+        # --- Event Handling for Page Navigation ---
+        def load_page_content(page_id_to_load: str):
+            logger.info(f"Attempting to load page content for: {page_id_to_load}")
+            webui_manager.navigation_state.set_page(
+                page_id_to_load
+            )  # Ensure state is set
+
+            page_factory = PAGE_REGISTRY.get(page_id_to_load)
+            if page_factory:
+                # Clear previous content - Gradio does this implicitly when returning new components
+                # for a gr.update() target, but here we want to replace the content of 'main_content_area'
+                # Returning a new gr.Column or a list of components for the 'main_content_area'
+                # should replace its children.
+                with (
+                    gr.Blocks() as page_block
+                ):  # Create a temporary block to build the page
+                    page_content_components = page_factory(webui_manager)
+
+                # This is tricky. We can't directly return components to replace children of main_content_area
+                # from a handler that isn't directly outputting to it via gr.update(outputs=main_content_area).
+                # A common pattern is to have the page factory functions build their UI *within*
+                # the main_content_area when it's first defined, and control visibility.
+                # Or, use gr.update() with a list of new components.
+
+                # For dynamic loading, let's try returning a new Column with the content.
+                # This needs to be tested if it correctly replaces the content of main_content_area.
+                # A more robust way might involve JavaScript or more complex Gradio state management.
+
+                # Simpler approach for now: Rebuild the specific page within a new Column.
+                # The `outputs` of the `current_page_id_trigger.change` will target `main_content_area`.
+                new_page_layout = page_factory(
+                    webui_manager
+                )  # This should return a gr.Column or list of components
+                logger.info(
+                    f"Successfully created components for page: {page_id_to_load}"
+                )
+                return new_page_layout
+            else:
+                logger.warning(f"No page factory found for page_id: {page_id_to_load}")
+                return gr.Markdown(f"## Page Not Found: {page_id_to_load}")
+
+        # When a nav button is clicked, it calls _handle_page_selection, which returns page_id.
+        # We need to link that returned page_id to update the current_page_id_trigger.
+        # This involves iterating over all buttons created in NavigationRail.
+        for page_id_key, nav_button_component in navigation_rail.page_buttons.items():
+            nav_button_component.click(
+                fn=lambda pid=page_id_key: pid,  # Return the page_id associated with this button
+                inputs=[],
+                outputs=[current_page_id_trigger],  # Update the hidden trigger textbox
+            )
+
+        # When the trigger textbox changes (either by nav click or initial load), load the page content.
+        current_page_id_trigger.change(
+            fn=load_page_content,
+            inputs=[current_page_id_trigger],
+            outputs=[
+                main_content_area
+            ],  # This will replace the content of main_content_area
+        )
+
+        # Trigger initial page load after the UI is fully built
+        # demo.load(fn=lambda: navigation_rail.initial_page_load_trigger(), inputs=[], outputs=[current_page_id_trigger])
+        # A slightly cleaner way for initial load might be to set current_page_id_trigger.value directly
+        # or ensure the default page is loaded by the first .change() event.
+        # The current setup with current_page_id_trigger initially having default_page_id should trigger it.
 
     return demo
+
+
+# To run this (example):
+# if __name__ == "__main__":
+#     logging.basicConfig(level=logging.INFO)
+#     ui = create_ui()
+#     ui.launch()

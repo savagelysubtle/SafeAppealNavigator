@@ -417,3 +417,16 @@ def create_interactive_chat_tab(webui_manager: WebuiManager):
     webui_manager.chat_manager = chat_manager
 
     logger.info("✅ Interactive Chat tab initialized successfully")
+
+
+def create_interactive_chat_page(webui_manager: WebuiManager):
+    """Creates the UI for the Interactive Chat page."""
+    with gr.Column(elem_id="interactive_chat_page_content") as page_column:
+        gr.Markdown("## 💬 Interactive Chat Page")
+        gr.Markdown(
+            "Full-featured interactive chat interface will be implemented here."
+        )
+        # Placeholder for chat components
+        # The actual create_interactive_chat_tab will be integrated here later.
+        logger.info("Interactive Chat page created (placeholder).")
+    return page_column

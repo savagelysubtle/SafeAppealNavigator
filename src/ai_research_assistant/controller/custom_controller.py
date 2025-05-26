@@ -9,10 +9,11 @@ from browser_use.controller.registry.service import RegisteredAction
 from browser_use.controller.service import Controller
 from browser_use.utils import time_execution_sync
 from langchain_core.language_models.chat_models import BaseChatModel
-from pydantic import BaseModel
+from langchain_core.tools import BaseTool
+from pydantic import BaseModel, create_model
 
-from src.ai_research_assistant.utils.mcp_client import (
-    create_tool_param_model,
+from src.ai_research_assistant.utils.tool_registry import (
+    ToolRegistry,
     setup_mcp_client_and_tools,
 )
 
@@ -36,8 +37,8 @@ class CustomController(Controller):
         super().__init__(exclude_actions=exclude_actions, output_model=output_model)
         self._register_custom_actions()
         self.ask_assistant_callback = ask_assistant_callback
-        self.mcp_client = None
-        self.mcp_server_config = None
+        self.mcp_client: Optional[ToolRegistry] = None
+        self.mcp_server_config: Optional[Dict[str, Any]] = None
 
     def _register_custom_actions(self):
         """Register all custom browser actions"""
@@ -122,7 +123,6 @@ class CustomController(Controller):
             for action_name, params in action.model_dump(exclude_unset=True).items():
                 if params is not None:
                     if action_name.startswith("mcp"):
-                        # this is a mcp tool
                         logger.debug(f"Invoke MCP tool: {action_name}")
                         registered_action = self.registry.registry.actions.get(
                             action_name
@@ -131,8 +131,17 @@ class CustomController(Controller):
                             return ActionResult(
                                 error=f"MCP tool {action_name} not found"
                             )
-                        mcp_tool = registered_action.function
-                        result = await mcp_tool.ainvoke(params)
+
+                        mcp_tool_func = registered_action.function
+                        if not isinstance(mcp_tool_func, BaseTool):
+                            logger.error(
+                                f"Registered function for MCP tool {action_name} is not a BaseTool instance."
+                            )
+                            return ActionResult(
+                                error=f"Invalid MCP tool configuration for {action_name}"
+                            )
+
+                        result = await mcp_tool_func.ainvoke(params)
                     else:
                         result = await self.registry.execute_action(
                             action_name,
@@ -162,40 +171,86 @@ class CustomController(Controller):
         self, mcp_server_config: Optional[Dict[str, Any]] = None
     ):
         self.mcp_server_config = mcp_server_config
-        if self.mcp_server_config:
-            self.mcp_client = await setup_mcp_client_and_tools(self.mcp_server_config)
-            self.register_mcp_tools()
+        if self.mcp_server_config and self.mcp_server_config.get(
+            "enable_mcp_integration", True
+        ):
+            try:
+                self.mcp_client = await setup_mcp_client_and_tools()
+                if self.mcp_client and self.mcp_client.tools:
+                    self.register_mcp_tools()
+                elif self.mcp_client:
+                    logger.info(
+                        "MCP Client initialized, but no tools were loaded. Check mcp.json configuration and server availability."
+                    )
+                else:
+                    logger.warning(
+                        "Failed to initialize MCP client from tool_registry."
+                    )
+            except FileNotFoundError as e:
+                logger.warning(f"MCP setup skipped: {e}")
+            except Exception as e:
+                logger.error(f"Error during MCP client setup: {e}", exc_info=True)
+        else:
+            logger.info("MCP client setup skipped as per configuration.")
 
     def register_mcp_tools(self):
         """
-        Register the MCP tools used by this controller.
+        Register the MCP tools obtained from the ToolRegistry.
         """
-        if self.mcp_client:
-            for server_name in self.mcp_client.server_name_to_tools:
-                for tool in self.mcp_client.server_name_to_tools[server_name]:
-                    tool_name = f"mcp.{server_name}.{tool.name}"
-                    try:
-                        param_model = create_tool_param_model(tool)
-                        # Handle pydantic version compatibility
-                        registered_action = RegisteredAction(
-                            name=tool_name,
-                            description=tool.description,
-                            function=tool,
-                            param_model=param_model,
-                        )
-                        # No need to set param_model separately now
+        if self.mcp_client and self.mcp_client.tools:
+            registered_tool_count = 0
+            for tool_instance in self.mcp_client.tools:
+                if not isinstance(tool_instance, BaseTool):
+                    logger.warning(
+                        f"Skipping non-BaseTool object in mcp_client.tools: {tool_instance}"
+                    )
+                    continue
 
-                        self.registry.registry.actions[tool_name] = registered_action
-                        logger.info(f"Add mcp tool: {tool_name}")
-                    except Exception as e:
-                        logger.error(f"Failed to register MCP tool {tool_name}: {e}")
-                        continue
-                logger.debug(
-                    f"Registered {len(self.mcp_client.server_name_to_tools[server_name])} mcp tools for {server_name}"
-                )
+                final_tool_name = tool_instance.name
+
+                try:
+                    param_model_class: Type[BaseModel]
+                    if tool_instance.args_schema is None:
+                        logger.warning(
+                            f"MCP tool {final_tool_name} has no args_schema. Creating a default one."
+                        )
+                        param_model_class = create_model(
+                            f"{final_tool_name.replace('_', '').title()}DefaultParams"
+                        )
+                    else:
+                        param_model_class = tool_instance.args_schema
+
+                    registered_action = RegisteredAction(
+                        name=final_tool_name,
+                        description=tool_instance.description,
+                        function=tool_instance,
+                        param_model=param_model_class,
+                    )
+                    self.registry.registry.actions[final_tool_name] = registered_action
+                    logger.info(
+                        f"Registered MCP tool: {final_tool_name} with description: {tool_instance.description[:50]}..."
+                    )
+                    registered_tool_count += 1
+                except Exception as e:
+                    logger.error(
+                        f"Failed to register MCP tool {final_tool_name}: {e}",
+                        exc_info=True,
+                    )
+                    continue
+            logger.info(
+                f"Registered {registered_tool_count} MCP tools from ToolRegistry."
+            )
+        elif self.mcp_client and not self.mcp_client.tools:
+            logger.info(
+                "MCP client is initialized, but no tools were found in the registry."
+            )
         else:
-            logger.warning("MCP client not started.")
+            logger.warning(
+                "MCP client not started or no tools available, cannot register MCP tools."
+            )
 
     async def close_mcp_client(self):
         if self.mcp_client:
-            await self.mcp_client.__aexit__(None, None, None)
+            await self.mcp_client.close()
+            self.mcp_client = None
+            logger.info("MCP client closed and resources released.")

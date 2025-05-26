@@ -10,7 +10,25 @@ from datetime import datetime
 
 import gradio as gr
 
+from src.ai_research_assistant.webui.webui_manager import WebuiManager
+
 logger = logging.getLogger(__name__)
+
+
+def create_orchestrator_page(webui_manager: WebuiManager):
+    """Creates the UI for the Orchestrator page."""
+    with gr.Column(elem_id="orchestrator_page_content") as page_column:
+        gr.Markdown("## 🎯 Orchestrator Page")
+        gr.Markdown("Content for the main legal workflow orchestrator will go here.")
+        gr.Markdown("This includes:")
+        gr.Markdown("- Workflow selection/creation")
+        gr.Markdown("- Overall progress monitoring")
+        gr.Markdown(
+            "- Access to integrated agent UIs (Intake, Search, Cross-Ref, DB Maint) via collapsible cards or similar."
+        )
+        # Placeholder for actual orchestrator components
+        logger.info("Orchestrator page created (placeholder).")
+    return page_column
 
 
 def create_orchestrator_tab(webui_manager):

@@ -22,6 +22,36 @@ from src.ai_research_assistant.config.mcp_client_config import mcp_config
 from src.ai_research_assistant.controller.custom_controller import CustomController
 
 
+class NavigationState:
+    """Manages the current navigation state of the UI."""
+
+    def __init__(self):
+        self.current_page: Optional[str] = (
+            None  # e.g., 'orchestrator', 'general_agents', 'settings'
+        )
+        self.page_history: List[str] = []
+
+    def set_page(self, page_id: str):
+        if self.current_page != page_id:
+            if self.current_page:
+                self.page_history.append(self.current_page)
+            self.current_page = page_id
+            # Limit history size if needed
+            if len(self.page_history) > 10:
+                self.page_history.pop(0)
+        print(f"Navigated to page: {page_id}")
+
+    def get_current_page(self) -> Optional[str]:
+        return self.current_page
+
+    def go_back(self) -> Optional[str]:
+        if self.page_history:
+            previous_page = self.page_history.pop()
+            self.current_page = previous_page
+            return previous_page
+        return None
+
+
 class WebuiManager:
     def __init__(self, settings_save_dir: str = "./tmp/webui_settings"):
         self.id_to_component: dict[str, Component] = {}
@@ -36,6 +66,9 @@ class WebuiManager:
 
         # Global settings manager - will be set by global_settings_panel.py
         self.global_settings_manager: Optional[Any] = None
+
+        # Initialize navigation state
+        self.navigation_state = NavigationState()
 
         # Load MCP configuration on startup
         self.refresh_mcp_config()
