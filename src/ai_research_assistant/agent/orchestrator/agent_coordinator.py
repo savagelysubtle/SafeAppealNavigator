@@ -13,7 +13,17 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
-import httpx  # Added for MCP tool communication
+import httpx  # Kept for now if any direct HTTP calls remain, but MCP calls will use MCPClient
+
+# Removed: from mcp import MCPError, ServerNotConnectedError
+# Removed: from mcp.client import Client
+# New import for MCP client from langchain_mcp_adapters
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
+# from mcp import (  # Assuming these are still relevant from mcp 1.9.1
+#     MCPError,
+#     ServerNotConnectedError,
+# )
 
 # Import specific agent classes that might be created
 from ..core.base_agent import AgentConfig, BaseAgent
@@ -68,7 +78,7 @@ class AgentInstance:
 
     agent_id: str
     agent_type: AgentType
-    agent_instance: Any
+    agent_instance: Any  # Should be BaseAgent or a compatible type
     is_busy: bool = False
     last_used: Optional[datetime] = None
     task_count: int = 0
@@ -123,55 +133,78 @@ class AgentCoordinator:
         self.active_agents: Dict[str, BaseAgent] = {}  # Stores actual agent instances
         self.agent_configs: Dict[str, AgentConfig] = {}  # Stores config for agents
 
-        self.mcp_servers_config: Dict[str, Any] = {}
+        self.raw_mcp_servers_config_data: Dict[
+            str, Any
+        ] = {}  # Stores the full loaded mcp_servers.json content
+        self.mcp_servers_config: Dict[
+            str, Any
+        ] = {}  # Stores just the "mcp_servers" part
         self._load_mcp_config(mcp_config_path)
 
-        # Shared HTTP client for MCP communication and potentially other HTTP tasks
-        # Configure with appropriate timeouts
-        client_timeout = httpx.Timeout(
-            timeout_seconds, connect=10.0
-        )  # Overall timeout, connect timeout
+        # Initialize MCPClient with the loaded server configurations
+        # The MCPClient will handle starting stdio servers and connecting to others.
+        try:
+            self.mcp_client = MultiServerMCPClient(connections=self.mcp_servers_config)
+            logger.info(
+                f"MultiServerMCPClient initialized with {len(self.mcp_servers_config)} server configurations."
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to initialize MultiServerMCPClient: {e}", exc_info=True
+            )
+            self.mcp_client = MultiServerMCPClient(
+                connections={}
+            )  # Fallback to an empty client
+
+        # Shared HTTP client for any direct HTTP tasks (not MCP related)
+        client_timeout = httpx.Timeout(float(timeout_seconds), connect=10.0)
         self.http_client = httpx.AsyncClient(timeout=client_timeout)
 
-        # Placeholder for managing concurrent agent tasks, if needed beyond simple dict
         self.task_semaphore = asyncio.Semaphore(max_concurrent)
 
         logger.info(
-            f"AgentCoordinator initialized. Max concurrent agents: {max_concurrent}, Timeout: {timeout_seconds}s"
+            f"AgentCoordinator initialized. Max concurrent agents: {max_concurrent}, MCP Config Path: {mcp_config_path}"
         )
         if not self.mcp_servers_config:
             logger.warning(
-                "MCP server configurations are empty or failed to load. MCP tools may be unavailable."
+                "MCP server configurations section is empty or failed to load. MCP tools may be unavailable via MCPClient."
             )
 
     def _load_mcp_config(self, config_path: str):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
-                self.mcp_servers_config = json.load(f)
-            if not isinstance(self.mcp_servers_config, dict):
+                full_config = json.load(f)
+            self.raw_mcp_servers_config_data = full_config  # Store the full structure
+
+            if not isinstance(full_config, dict) or "mcp_servers" not in full_config:
                 logger.error(
-                    f"MCP config from {config_path} is not a dictionary. Resetting to empty."
+                    f"MCP config from {config_path} is malformed or missing 'mcp_servers' key. Resetting to empty."
                 )
                 self.mcp_servers_config = {}
             else:
+                # This self.mcp_servers_config is what MCPClient expects
+                self.mcp_servers_config = full_config.get("mcp_servers", {})
                 logger.info(
-                    f"Successfully loaded MCP server configurations from {config_path}"
+                    f"Successfully extracted 'mcp_servers' configurations from {config_path}"
                 )
         except FileNotFoundError:
             logger.error(
                 f"MCP server configuration file not found: {config_path}. MCP tools will be unavailable."
             )
             self.mcp_servers_config = {}
+            self.raw_mcp_servers_config_data = {}
         except json.JSONDecodeError as e:
             logger.error(
                 f"Error decoding JSON from MCP server configuration file: {config_path}: {e}. MCP tools will be unavailable."
             )
             self.mcp_servers_config = {}
+            self.raw_mcp_servers_config_data = {}
         except Exception as e:
             logger.error(
                 f"An unexpected error occurred while loading MCP server configurations from {config_path}: {e}"
             )
             self.mcp_servers_config = {}
+            self.raw_mcp_servers_config_data = {}
 
     async def _create_agent_instance(
         self, agent_id: str, agent_config: AgentConfig
@@ -179,12 +212,10 @@ class AgentCoordinator:
         """
         Creates and initializes a specific agent instance based on AgentConfig.
         """
-        agent_type_enum = (
-            agent_config.agent_type
-        )  # This should be an AgentType enum member
+        agent_type_enum = agent_config.agent_type
 
         if not isinstance(agent_type_enum, AgentType):
-            try:  # Attempt to convert from string if necessary, though agent_config.agent_type should already be enum
+            try:
                 agent_type_enum = AgentType(str(agent_type_enum).lower())
             except ValueError:
                 logger.error(
@@ -200,7 +231,7 @@ class AgentCoordinator:
             "agent_id": agent_id,
             "config": agent_config,
             "global_settings_manager": self.global_settings_manager,
-            "agent_coordinator": self,  # Pass self to agents
+            "agent_coordinator": self,
         }
 
         agent_instance_obj: Optional[BaseAgent] = None
@@ -209,34 +240,14 @@ class AgentCoordinator:
                 logger.info(
                     f"Creating EnhancedLegalIntakeAgent instance for {agent_type_enum.value}"
                 )
-                # EnhancedLegalIntakeAgent might have specific args not in common_kwargs, handle as needed
-                # For now, assuming common_kwargs are sufficient or handled by its **kwargs
                 agent_instance_obj = EnhancedLegalIntakeAgent(**common_kwargs)
-            # elif agent_type_enum == AgentType.LEGAL_RESEARCH:
-            #     logger.info(f"Creating LegalResearchAgent instance for {agent_type_enum.value}")
-            #     agent_instance_obj = LegalResearchAgent(**common_kwargs)
-            # Add other specific agent types here
-            elif (
-                agent_type_enum == AgentType.PLACEHOLDER or True
-            ):  # Fallback for undefined types
+            elif agent_type_enum == AgentType.PLACEHOLDER or True:
                 logger.warning(
-                    f"Agent type '{agent_type_enum.value}' not specifically handled or is PLACEHOLDER. Creating AgentPlaceholder."
+                    f"Agent type '{agent_type_enum.value}' not specifically handled or is PLACEHOLDER. Creating generic BaseAgent."
                 )
-                # Note: AgentPlaceholder is not a BaseAgent subclass in this example, adjust if it should be
-                # For this example, we'll skip creating a BaseAgent type for it to avoid type errors if it's not.
-                # If AgentPlaceholder is to be managed like other agents, it should inherit BaseAgent.
-                # This part might need adjustment based on AgentPlaceholder's actual class definition.
-                # For now, let's assume we don't add it to self.active_agents if it's not a BaseAgent.
-                # Or, create a simple BaseAgent wrapper if needed.
-                # To keep it simple, if we want a placeholder in active_agents, it needs to be a BaseAgent:
-                placeholder_config = AgentConfig(
-                    agent_id=agent_id,
-                    agent_type=agent_type_enum,
-                    system_prompt="Placeholder",
-                )
-                agent_instance_obj = BaseAgent(
-                    **common_kwargs, config=placeholder_config
-                )  # Generic BaseAgent as placeholder
+                # Ensure the config passed to BaseAgent is valid for it.
+                # If AgentConfig is directly usable by BaseAgent, this is fine.
+                agent_instance_obj = BaseAgent(**common_kwargs)
                 logger.info(
                     f"Created generic BaseAgent as placeholder for {agent_type_enum.value}"
                 )
@@ -272,219 +283,210 @@ class AgentCoordinator:
 
     async def execute_agent_task(
         self,
-        agent_id: str,
-        agent_config: AgentConfig,
-        task_description: str,
-        parameters: Dict[str, Any],
+        agent_id: str,  # Can be a friendly name or a specific ID
+        agent_config: AgentConfig,  # Config to use if agent needs to be created
+        task_description: str,  # For agents that take a descriptive task
+        parameters: Dict[str, Any],  # Parameters for the agent's task method
+        # task_type: str, # This seems to be more for the direct agent.execute_task(AgentTask)
     ) -> Dict[str, Any]:
         async with self.task_semaphore:
-            agent = await self.get_agent_instance(agent_id, agent_config)
+            # If agent_id is more of a type/role, ensure agent_config.agent_id is set or use it
+            effective_agent_id = agent_config.agent_id or agent_id
+
+            agent = await self.get_agent_instance(effective_agent_id, agent_config)
             if not agent:
                 return {
                     "success": False,
-                    "error": f"Agent {agent_id} could not be initialized or retrieved.",
+                    "error": f"Agent {effective_agent_id} could not be initialized or retrieved.",
                 }
 
             try:
-                # Assuming BaseAgent and its subclasses have an async run method
-                # result = await agent.run(task_description=task_description, parameters=parameters)
-                # For now, let's assume a generic 'process' method or similar
-                if hasattr(agent, "process_task"):  # Example method name
+                # The design implies agents have an execute_task method that takes an AgentTask object.
+                # Or, a more generic "run" or "process" method.
+                # Let's assume a generic method based on agent_config.agent_type for now,
+                # or a direct call to a method named in task_description if that's the convention.
+
+                # This part needs clarification on how agent tasks are dispatched.
+                # If agents are expected to have methods matching `task_description` or a common `process(params)`:
+                if hasattr(agent, task_description) and callable(
+                    getattr(agent, task_description)
+                ):
+                    # Assuming task_description is a method name and parameters are its args
+                    result = await getattr(agent, task_description)(**parameters)
+                elif hasattr(agent, "process_task"):  # A common method name
                     result = await agent.process_task(task_description, parameters)
-                elif hasattr(agent, "run"):
-                    result = await agent.run(
-                        task_description, parameters
-                    )  # Fallback to run
+                elif hasattr(agent, "run"):  # Fallback
+                    result = await agent.run(task_description, parameters)
                 else:
+                    # If using the AgentTask structure:
+                    # task_obj = AgentTask(task_id=str(uuid.uuid4()), agent_type=agent_config.agent_type, task_type=task_description, parameters=parameters)
+                    # result = await agent.execute_task(task_obj)
                     logger.error(
-                        f"Agent {agent_id} of type {agent_config.agent_type.value} does not have a 'process_task' or 'run' method."
+                        f"Agent {effective_agent_id} (type {agent_config.agent_type.value}) lacks a suitable method for task '{task_description}' or a generic handler."
                     )
                     return {
                         "success": False,
                         "error": "Agent task execution method not found.",
                     }
-                return {"success": True, "data": result}
+
+                # Assuming result from agent is directly usable or wrapped in a dict by the agent.
+                # If the agent returns a complex object, it should be serialized to dict here or by agent.
+                if isinstance(result, dict) and "success" in result:
+                    return result
+                else:
+                    return {"success": True, "data": result}
+
             except asyncio.TimeoutError:
-                logger.error(f"Task timed out for agent {agent_id}")
+                logger.error(f"Task timed out for agent {effective_agent_id}")
                 return {
                     "success": False,
-                    "error": f"Task timed out for agent {agent_id}",
+                    "error": f"Task timed out for agent {effective_agent_id}",
                 }
             except Exception as e:
                 logger.error(
-                    f"Error executing task on agent {agent_id}: {e}", exc_info=True
+                    f"Error executing task on agent {effective_agent_id}: {e}",
+                    exc_info=True,
                 )
-                return {"success": False, "error": f"Error on agent {agent_id}: {e}"}
+                return {
+                    "success": False,
+                    "error": f"Error on agent {effective_agent_id}: {str(e)}",
+                }
 
     async def execute_mcp_tool(
         self,
-        mcp_server_name: str,  # This is a STRING, e.g., "filesystem_server"
-        task_type: str,  # This is the specific tool/endpoint on the MCP server, e.g., "write_file"
+        mcp_server_name: str,
+        task_type: str,  # This is the 'tool_name' for MCPClient
         parameters: Dict[str, Any],
-        request_timeout: Optional[float] = None,  # Specific timeout for this request
+        request_timeout: Optional[float] = None,  # MCPClient has per-call timeout
     ) -> Dict[str, Any]:
         """
-        Executes a tool on a specified MCP server.
-        This method communicates directly with MCP tool servers and DOES NOT use AgentType for mcp_server_name.
+        Executes a tool on a specified MCP server using the MultiServerMCPClient.
+        Handles session management and error reporting.
         """
-        if not self.mcp_servers_config:
-            logger.error(
-                "MCP server configurations not loaded or empty. Cannot execute MCP tool."
-            )
-            return {"success": False, "error": "MCP configurations not loaded."}
+        if not self.mcp_client:
+            logger.error("MCP client is not initialized. Cannot execute MCP tool.")
+            return {"success": False, "error": "MCP client not initialized"}
 
-        server_details = self.mcp_servers_config.get(mcp_server_name)
-        if not server_details:
-            logger.error(
-                f"MCP server '{mcp_server_name}' not found in configuration. Available: {list(self.mcp_servers_config.keys())}"
-            )
-            return {
-                "success": False,
-                "error": f"MCP server '{mcp_server_name}' not configured.",
-            }
-
-        if not isinstance(server_details, dict) or "url" not in server_details:
-            logger.error(
-                f"Configuration for MCP server '{mcp_server_name}' is malformed (must be a dict with a 'url' key)."
-            )
-            return {
-                "success": False,
-                "error": f"Malformed configuration for MCP server '{mcp_server_name}'.",
-            }
-
-        base_url = server_details["url"]
-        # Convention: MCP tools might be at /tools/{task_type} or just /{task_type}
-        # The example mcp_servers.json implies the server itself is the endpoint for different tools.
-        # Let's assume the task_type is part of the payload or the server routes based on a 'tool' field in params.
-        # For a generic MCP client, often the endpoint is fixed and the payload specifies the tool.
-        # If the URL itself needs to change per task_type, this needs adjustment.
-        # For now, let's assume the base_url is the endpoint and the payload specifies the tool.
-        # Or, a common pattern: POST to base_url, payload: {"tool": task_type, "params": parameters}
-
-        # Let's use a convention like base_url/task_type if tools are distinct endpoints
-        # Or if server has one endpoint, then task_type goes into payload.
-        # Assuming distinct endpoints for now, like http://mcp_server_url/write_file
-        tool_url = f"{base_url.rstrip('/')}/{task_type}"
-
-        payload = parameters  # Direct parameters, or wrap if MCP server expects {"tool": task_type, "params": parameters}
+        logger.info(
+            f"Attempting to execute MCP tool '{task_type}' on server '{mcp_server_name}' with params: {parameters}"
+        )
 
         try:
-            logger.info(
-                f"Executing MCP tool: Server='{mcp_server_name}', URL='{tool_url}', Task='{task_type}'"
-            )
-            logger.debug(f"MCP Payload: {json.dumps(payload, indent=2)}")
+            # MultiServerMCPClient's get_tools() can be used to get a specific tool
+            # or all tools. For a single tool execution, we might need to adjust
+            # how tools are fetched or invoked if direct invocation like this isn't supported.
+            # This assumes a method like `invoke_tool` or similar exists,
+            # or that `get_tools` can be filtered and the tool invoked.
+            # For now, we adapt to how tools are typically invoked via the client.
 
-            current_timeout = self.http_client.timeout  # Default client timeout
-            if request_timeout is not None:
-                # httpx.Timeout can take a single float for all timeouts or a Timeout object
-                effective_timeout = httpx.Timeout(request_timeout)
+            # The MultiServerMCPClient is designed to get *all* tools from a server (or all servers)
+            # and then you use them. It doesn't have a direct "invoke_tool_on_server" method.
+            # We need to get the tools for the specific server first.
+
+            async with self.mcp_client.session(mcp_server_name) as session:
+                # Load tools for the specific session
+                tools = await load_mcp_tools(session)
+
+                # Find the specific tool
+                target_tool = None
+                for tool in tools:
+                    # Tool names from MultiServerMCPClient might be prefixed, e.g., "server_name.tool_name"
+                    # Or, if loading from a session for a specific server, it might just be "tool_name"
+                    # We need to confirm the naming convention.
+                    # For now, let's assume task_type is the direct tool name.
+                    if tool.name == task_type or tool.name.endswith(f".{task_type}"):
+                        target_tool = tool
+                        break
+
+                if not target_tool:
+                    logger.error(f"Tool '{task_type}' not found on server '{mcp_server_name}'. Available: {[t.name for t in tools]}")
+                    return {
+                        "success": False,
+                        "error": f"Tool '{task_type}' not found on server '{mcp_server_name}'",
+                    }
+
+                # Execute the tool
+                # The actual invocation depends on how LangChain tools are structured by the adapter
+                logger.info(f"Invoking tool '{target_tool.name}' with parameters: {parameters}")
+                result = await target_tool.ainvoke(parameters, timeout=request_timeout)
+
+            logger.info(
+                f"MCP tool '{task_type}' on server '{mcp_server_name}' executed successfully. Result: {result}"
+            )
+            # Ensure result is serializable, often tools return Pydantic models or strings
+            if hasattr(result, 'dict'):
+                return {"success": True, "result": result.dict()}
+            elif isinstance(result, (str, dict, list, int, float, bool, type(None))):
+                return {"success": True, "result": result}
             else:
-                effective_timeout = current_timeout
+                return {"success": True, "result": str(result)}
 
-            response = await self.http_client.post(
-                tool_url, json=payload, timeout=effective_timeout
-            )
-            response.raise_for_status()  # Raise an exception for HTTP error codes (4xx or 5xx)
-
-            response_data = response.json()
-            logger.info(
-                f"Successfully executed MCP tool '{task_type}' on server '{mcp_server_name}'. Status: {response.status_code}"
-            )
-
-            if not isinstance(response_data, dict):
-                logger.warning(
-                    f"MCP tool response from {tool_url} was not a dict: {type(response_data)}. Body: {response.text[:200]}"
-                )
-                # Attempt to wrap if it's a simple success (e.g. plain string "OK")
-                return {
-                    "success": False,
-                    "error": "Invalid response format from MCP tool (not a dict).",
-                    "raw_response_text": response.text,
-                }
-
-            # If response_data doesn't inherently have a "success" field, we might infer it or expect it.
-            # For now, assume the returned dict is the result.
-            return response_data
-
-        except httpx.TimeoutException as e:
+        except Exception as e:  # Catching a more generic exception
+            error_type = type(e).__name__
+            error_message = str(e)
             logger.error(
-                f"Timeout while calling MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e}"
-            )
-            return {"success": False, "error": f"Timeout calling MCP tool: {str(e)}"}
-        except httpx.ConnectError as e:
-            logger.error(
-                f"Connection error while calling MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e}"
-            )
-            return {
-                "success": False,
-                "error": f"Connection error calling MCP tool: {str(e)}",
-            }
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"HTTP error {e.response.status_code} while calling MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e.response.text[:500]}"
-            )
-            return {
-                "success": False,
-                "error": f"HTTP {e.response.status_code} from MCP tool: {e.response.text[:100]}",
-                "details": e.response.text,
-            }
-        except httpx.RequestError as e:  # Catch-all for other httpx request issues
-            logger.error(
-                f"Request error while calling MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e}"
-            )
-            return {
-                "success": False,
-                "error": f"Request error calling MCP tool: {str(e)}",
-            }
-        except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to decode JSON response from MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e}. Response text: {response.text[:500]}"
-            )
-            return {
-                "success": False,
-                "error": f"JSON decode error from MCP tool: {str(e)}",
-                "raw_response_text": response.text if "response" in locals() else "N/A",
-            }
-        except Exception as e:
-            logger.error(
-                f"Unexpected error executing MCP tool '{task_type}' on '{mcp_server_name}' at '{tool_url}': {e}",
+                f"Generic Exception ({error_type}) for server '{mcp_server_name}' tool '{task_type}': {error_message}",
                 exc_info=True,
             )
-            return {"success": False, "error": f"Unexpected error: {str(e)}"}
+            return {
+                "success": False,
+                "error": f"MCP tool execution failed: {error_type} - {error_message}",
+            }
 
     async def shutdown_agent(self, agent_id: str):
         if agent_id in self.active_agents:
             agent = self.active_agents.pop(agent_id)
             self.agent_configs.pop(agent_id, None)
-            if hasattr(
-                agent, "shutdown"
-            ):  # Assuming agents might have a shutdown method
-                await agent.shutdown()
-            logger.info(f"Agent {agent_id} has been shutdown and removed.")
+            if hasattr(agent, "shutdown") and callable(agent.shutdown):
+                try:
+                    await agent.shutdown()
+                    logger.info(f"Agent {agent_id} shutdown method called.")
+                except Exception as e:
+                    logger.error(
+                        f"Error during agent {agent_id} shutdown: {e}", exc_info=True
+                    )
+            logger.info(f"Agent {agent_id} instance removed from active pool.")
         else:
             logger.warning(
                 f"Attempted to shutdown non-existent or inactive agent: {agent_id}"
             )
 
     async def close(self):
-        """Clean up resources, like the HTTP client and active agents."""
-        logger.info("AgentCoordinator attempting to close...")
-        # Shutdown all active agents
-        active_agent_ids = list(self.active_agents.keys())
-        for agent_id in active_agent_ids:
-            logger.info(f"Shutting down agent {agent_id} during coordinator close...")
-            await self.shutdown_agent(agent_id)
+        """Gracefully close all resources, including MCP client and HTTP client."""
+        logger.info("Shutting down AgentCoordinator...")
 
+        # Close the MultiServerMCPClient
+        if self.mcp_client:
+            try:
+                # MultiServerMCPClient uses an async context manager internally for sessions,
+                # but direct close method might be available or needed if not used with 'async with'.
+                # Checking langchain_mcp_adapters for specific close/cleanup method.
+                # Typically, an 'aclose' or similar method is provided for async clients.
+                # If it manages server processes, it should shut them down.
+                if hasattr(self.mcp_client, "aclose"):
+                    await self.mcp_client.aclose()
+                elif hasattr(
+                    self.mcp_client, "close"
+                ):  # Fallback for sync close, though unlikely for this client
+                    self.mcp_client.close()
+                logger.info("MultiServerMCPClient closed.")
+            except Exception as e:
+                logger.error(f"Error closing MultiServerMCPClient: {e}", exc_info=True)
+            self.mcp_client = None
+
+        # Close the shared HTTP client
         if self.http_client:
             await self.http_client.aclose()
             logger.info("AgentCoordinator's HTTP client closed.")
+
         logger.info("AgentCoordinator closed.")
 
 
-# Example AgentConfig (ensure this matches your actual definition)
+# Example AgentConfig (ensure this matches your actual definition in core.base_agent)
 # from pydantic import BaseModel, Field
+# import uuid # Required if using default_factory for agent_id
 # class AgentConfig(BaseModel):
 #     agent_id: str = Field(default_factory=lambda: f"agent_{uuid.uuid4().hex[:8]}")
-#     agent_type: AgentType
+#     agent_type: AgentType # This should refer to your AgentType Enum
 #     system_prompt: Optional[str] = None
-#     # other config fields
+#     # other config fields like model_name, temperature, etc., if they are per-agent

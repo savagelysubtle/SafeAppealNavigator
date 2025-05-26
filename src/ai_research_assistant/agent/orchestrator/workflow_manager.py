@@ -269,8 +269,8 @@ class WorkflowManager:
 
             if self.agent_coordinator:
                 # Use MCP to write file
-                mcp_result = await self.agent_coordinator.execute_agent_task(
-                    agent_type="filesystem_server",
+                mcp_result = await self.agent_coordinator.execute_mcp_tool(
+                    mcp_server_name="filesystem_server",
                     task_type="write_file",
                     parameters={
                         "file_path": str(workflow_file_path),
@@ -303,15 +303,22 @@ class WorkflowManager:
         try:
             content_data_str: Optional[str] = None
             if self.agent_coordinator:
-                if not await self.agent_coordinator.execute_agent_task(
-                    agent_type="filesystem_server",
+                # Check if file exists using MCP's get_file_info
+                file_info_result = await self.agent_coordinator.execute_mcp_tool(
+                    mcp_server_name="filesystem_server",
                     task_type="get_file_info",
                     parameters={"file_path": str(workflow_file_path)},
-                ).get("success", False):
+                )
+                # If get_file_info was not successful, assume file doesn't exist or error occurred.
+                if not file_info_result.get("success"):
+                    logger.debug(
+                        f"MCP: File info check failed for {workflow_file_path} or file does not exist."
+                    )
                     return False
 
-                mcp_result = await self.agent_coordinator.execute_agent_task(
-                    agent_type="filesystem_server",
+                # If file exists (i.e., get_file_info was successful), read it
+                mcp_result = await self.agent_coordinator.execute_mcp_tool(
+                    mcp_server_name="filesystem_server",
                     task_type="read_file",
                     parameters={"file_path": str(workflow_file_path)},
                 )
@@ -398,14 +405,16 @@ class WorkflowManager:
             workflow_file_path = self.work_dir / f"workflow_{workflow_id}.json"
 
             if self.agent_coordinator:
-                mcp_result_info = await self.agent_coordinator.execute_agent_task(
-                    agent_type="filesystem_server",
+                # Check if file exists before attempting deletion
+                mcp_result_info = await self.agent_coordinator.execute_mcp_tool(
+                    mcp_server_name="filesystem_server",
                     task_type="get_file_info",
                     parameters={"file_path": str(workflow_file_path)},
                 )
-                if mcp_result_info.get("success"):  # File exists
-                    mcp_result_delete = await self.agent_coordinator.execute_agent_task(
-                        agent_type="filesystem_server",
+                # If get_file_info was successful, it implies the file exists or existed.
+                if mcp_result_info.get("success"):
+                    mcp_result_delete = await self.agent_coordinator.execute_mcp_tool(
+                        mcp_server_name="filesystem_server",
                         task_type="delete_file",
                         parameters={"file_path": str(workflow_file_path)},
                     )
@@ -413,7 +422,10 @@ class WorkflowManager:
                         logger.error(
                             f"MCP Error deleting workflow {workflow_id}: {mcp_result_delete.get('error')}"
                         )
-                        # Potentially return False or raise an error, depending on desired strictness
+                else:  # If get_file_info failed, log it but don't try to delete.
+                    logger.warning(
+                        f"MCP: Could not get file info for {workflow_file_path} during delete attempt: {mcp_result_info.get('error')}. File will not be deleted via MCP."
+                    )
             else:
                 if workflow_file_path.exists():
                     workflow_file_path.unlink()
