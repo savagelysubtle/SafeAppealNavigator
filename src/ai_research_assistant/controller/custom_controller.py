@@ -1,7 +1,7 @@
 import inspect
 import logging
 import os
-from typing import Any, Awaitable, Callable, Dict, Optional, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, TypeVar, Union
 
 from browser_use.agent.views import ActionModel, ActionResult
 from browser_use.browser.context import BrowserContext
@@ -12,12 +12,13 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, create_model
 
+from src.ai_research_assistant.config import MCPConfigLoader
+
 # Updated imports for MCP refactor
 from src.ai_research_assistant.mcp.manager import (
     MCPManager,
     get_mcp_manager_instance,
 )
-from src.ai_research_assistant.config.mcp_config import MCPConfigLoader
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,9 @@ class CustomController(Controller):
         super().__init__(exclude_actions=exclude_actions, output_model=output_model)
         self._register_custom_actions()
         self.ask_assistant_callback = ask_assistant_callback
-        self.mcp_manager_instance: Optional[MCPManager] = None # Changed from mcp_client
+        self.mcp_manager_instance: Optional[MCPManager] = (
+            None  # Changed from mcp_client
+        )
         self.mcp_server_config: Optional[Dict[str, Any]] = None
 
     def _register_custom_actions(self):
@@ -177,17 +180,18 @@ class CustomController(Controller):
             "enable_mcp_integration", True
         ):
             try:
-                self.mcp_manager_instance = await get_mcp_manager_instance() # Changed
-                if self.mcp_manager_instance and self.mcp_manager_instance.get_all_loaded_tools(): # Changed
+                self.mcp_manager_instance = await get_mcp_manager_instance()  # Changed
+                if (
+                    self.mcp_manager_instance
+                    and self.mcp_manager_instance.get_all_loaded_tools()
+                ):  # Changed
                     self.register_mcp_tools()
-                elif self.mcp_manager_instance: # Changed
+                elif self.mcp_manager_instance:  # Changed
                     logger.info(
                         "MCP Manager initialized, but no tools were loaded. Check mcp.json configuration and server availability."
                     )
                 else:
-                    logger.warning(
-                        "Failed to initialize MCP Manager from mcp.manager."
-                    )
+                    logger.warning("Failed to initialize MCP Manager from mcp.manager.")
             except FileNotFoundError as e:
                 logger.warning(f"MCP setup skipped: {e}")
             except Exception as e:
@@ -201,8 +205,13 @@ class CustomController(Controller):
         It fetches all available tools from MCPManager and then filters them
         based on the current agent type using MCPConfigLoader.
         """
-        if not self.mcp_manager_instance or not self.mcp_manager_instance.get_all_loaded_tools():
-            logger.warning("MCP Manager not initialized or no tools loaded. Cannot register MCP tools.")
+        if (
+            not self.mcp_manager_instance
+            or not self.mcp_manager_instance.get_all_loaded_tools()
+        ):
+            logger.warning(
+                "MCP Manager not initialized or no tools loaded. Cannot register MCP tools."
+            )
             return
 
         all_mcp_tools = self.mcp_manager_instance.get_all_loaded_tools()
@@ -213,19 +222,27 @@ class CustomController(Controller):
         config_loader = MCPConfigLoader()
         # TODO: Determine agent_type dynamically if CustomController is used by multiple agent types.
         # For now, using a generic placeholder. This should match a key in agent_mcp_mapping.json.
-        agent_type = "CustomControllerAgent" 
+        agent_type = "CustomControllerAgent"
         specific_tool_names = config_loader.get_agent_tools(agent_type)
 
         tools_to_register: List[BaseTool]
         if specific_tool_names:
-            logger.info(f"Found specific tool mapping for agent type '{agent_type}'. Filtering tools: {specific_tool_names}")
+            logger.info(
+                f"Found specific tool mapping for agent type '{agent_type}'. Filtering tools: {specific_tool_names}"
+            )
             # Ensure a map for quick lookup if specific_tool_names is long
             specific_tool_names_set = set(specific_tool_names)
-            tools_to_register = [t for t in all_mcp_tools if t.name in specific_tool_names_set]
+            tools_to_register = [
+                t for t in all_mcp_tools if t.name in specific_tool_names_set
+            ]
             if not tools_to_register and all_mcp_tools:
-                logger.warning(f"Agent type '{agent_type}' requested specific tools, but none of them were found among the loaded MCP tools. Loaded tools: {[t.name for t in all_mcp_tools]}")
+                logger.warning(
+                    f"Agent type '{agent_type}' requested specific tools, but none of them were found among the loaded MCP tools. Loaded tools: {[t.name for t in all_mcp_tools]}"
+                )
         else:
-            logger.info(f"No specific tool mapping found for agent type '{agent_type}'. Registering all available MCP tools ({len(all_mcp_tools)} tools).")
+            logger.info(
+                f"No specific tool mapping found for agent type '{agent_type}'. Registering all available MCP tools ({len(all_mcp_tools)} tools)."
+            )
             tools_to_register = all_mcp_tools
 
         if not tools_to_register:
@@ -242,19 +259,73 @@ class CustomController(Controller):
 
             try:
                 param_model_class: Type[BaseModel]
-                if tool_instance.args_schema is None:
+                if (
+                    tool_instance.args_schema is None
+                    or not hasattr(tool_instance.args_schema, "properties")
+                    or not tool_instance.args_schema.properties
+                ):
                     logger.warning(
-                        f"MCP tool {final_tool_name} has no args_schema. Creating a default one."
+                        f"MCP tool {final_tool_name} has no args_schema or an empty one. Creating a default parameter model."
                     )
                     # Ensure the generated name is valid for a class
                     model_name = f"{final_tool_name.replace('_', '').replace('.', '').title()}DefaultParams"
                     param_model_class = create_model(model_name)
                 else:
-                    # We expect tool_instance.args_schema to be Type[BaseModel]
-                    # If linter still complains, it might be a false positive or a deeper type issue
-                    # with how ArgsSchema is inferred by the linter.
-                    param_model_class = tool_instance.args_schema
-                
+                    # Dynamically create a Pydantic model from the args_schema object
+                    model_name = f"{final_tool_name.replace('_', '').replace('.', '').title()}Params"
+                    # Assuming tool_instance.args_schema is an McpToolSchema instance or similar
+                    # which has 'properties' (dict) and 'required' (list)
+                    field_definitions = {
+                        name: (
+                            prop.get("type", Any),
+                            prop.get(
+                                "default",
+                                ...
+                                if name in (tool_instance.args_schema.required or [])
+                                else None,
+                            ),
+                        )
+                        for name, prop in tool_instance.args_schema.properties.items()
+                    }
+                    # A simple type mapping, can be expanded
+                    for (
+                        name,
+                        prop_details,
+                    ) in tool_instance.args_schema.properties.items():
+                        python_type: Type = Any
+                        schema_type = prop_details.get("type")
+                        if schema_type == "string":
+                            python_type = str
+                        elif schema_type == "integer":
+                            python_type = int
+                        elif schema_type == "number":
+                            python_type = float
+                        elif schema_type == "boolean":
+                            python_type = bool
+                        elif schema_type == "array":
+                            python_type = List[
+                                Any
+                            ]  # Further introspection needed for item types
+                        elif schema_type == "object":
+                            python_type = Dict[
+                                str, Any
+                            ]  # Further introspection needed for nested objects
+
+                        default_value = prop_details.get("default")
+                        is_required = name in (tool_instance.args_schema.required or [])
+
+                        if default_value is not None:
+                            field_definitions[name] = (
+                                Optional[python_type],
+                                default_value,
+                            )
+                        elif is_required:
+                            field_definitions[name] = (python_type, ...)
+                        else:
+                            field_definitions[name] = (Optional[python_type], None)
+
+                    param_model_class = create_model(model_name, **field_definitions)
+
                 registered_action = RegisteredAction(
                     name=final_tool_name,
                     description=tool_instance.description,
@@ -277,7 +348,9 @@ class CustomController(Controller):
         )
 
     async def close_mcp_client(self):
-        if self.mcp_manager_instance: # Changed
-            await self.mcp_manager_instance.close_connections() # Changed to close_connections
-            self.mcp_manager_instance = None # Changed
+        if self.mcp_manager_instance:  # Changed
+            await (
+                self.mcp_manager_instance.close_connections()
+            )  # Changed to close_connections
+            self.mcp_manager_instance = None  # Changed
             logger.info("MCP Manager closed and resources released.")

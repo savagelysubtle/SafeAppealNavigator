@@ -25,13 +25,9 @@ try:
     # from mcp import ClientSession # Placeholder for actual SDK client session - Not directly used in current logic
     # from mcp import StdioServerParameters # Placeholder - Not directly used
     from mcp import types as mcp_types_sdk  # MCP SDK type definitions
-    from mcp.client import (
+    from mcp import (
         Client as SDKClient,
-    )
-    from mcp.client import (
         SseClientTransport as SDKSseClientTransport,
-    )
-    from mcp.client import (
         StdioClientTransport as SDKStdioClientTransport,
     )
     # from mcp.client.mcp_errors import MCPError # Assuming a common error class - Handled by generic Exception for now
