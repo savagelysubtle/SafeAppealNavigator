@@ -1,0 +1,946 @@
+{
+  "base_project_name": "AiResearchAgent",
+  "source_root": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent",
+  "target_root_src_prefix": "src/ai_research_agent",
+  "operations": [
+    { "action": "create_dir", "path": "AiResearchAgent" },
+    { "action": "create_dir", "path": "AiResearchAgent/scripts/mover" },
+    { "action": "create_dir", "path": "AiResearchAgent/src" },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\README.md",
+      "target": "AiResearchAgent/README.md",
+      "content_update_placeholder": "# AiResearchAgent (Refactored)\n\nThis is the refactored AiResearchAgent project. Original README content below:\n\n---\n{ORIGINAL_CONTENT}"
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\pyproject.toml",
+      "target": "AiResearchAgent/pyproject.toml"
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\uv.lock",
+      "target": "AiResearchAgent/uv.lock"
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\.env.example",
+      "target": "AiResearchAgent/.env.example"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/.gitignore",
+      "content": ".env\n__pycache__/\n*.pyc\n*.pyo\n*.pyd\n.pytest_cache/\n.mypy_cache/\n.uv/\nbuild/\ndist/\n*.egg-info/\n.idea/\n.vscode/"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/main.py",
+      "content": "\"\"\"Main application entry point for AiResearchAgent.\n\nThis script initializes and runs the FastAPI server.\nIt may also handle launching the Gradio UI in the future.\n\"\"\"\nimport uvicorn\n\nif __name__ == \"__main__\":\n    print(\"Attempting to run FastAPI app. Ensure 'src.ai_research_agent.api.main_api_router:app' is correctly implemented and importable.\")\n    print(\"To run, implement main_api_router and uncomment the uvicorn.run line below.\")\n    # try:\n    #     from src.ai_research_agent.api.main_api_router import app as fastapi_app\n    #     uvicorn.run(fastapi_app, host=\"0.0.0.0\", port=8000, reload=True)\n    # except ImportError as e:\n    #     print(f\"Could not import fastapi_app: {e}. Please ensure it is correctly defined in src/ai_research_agent/api/main_api_router.py\")\n"
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\webui.py"
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\LICENSE"
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\SECURITY.md"
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\tests",
+      "optional": true
+    },
+    { "action": "create_dir", "path": "AiResearchAgent/tests" },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/tests/__init__.py",
+      "content": ""
+    },
+    { "action": "create_dir", "path": "AiResearchAgent/scripts" },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/scripts/__init__.py",
+      "content": ""
+    },
+    { "action": "create_dir", "path": "AiResearchAgent/docs" },
+    { "action": "create_dir", "path": "AiResearchAgent/entrypoints" },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/entrypoints/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/entrypoints/run_main_api_service.py",
+      "content": "\"\"\"Entrypoint for running the main FastAPI application service.\"\"\"\n# import uvicorn\n# from src.ai_research_agent.api.main_api_router import app\n# \n# if __name__ == \"__main__\":\n# uvicorn.run(app, host=\"0.0.0.0\", port=8000)\n"
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_assistant",
+      "target": "AiResearchAgent/src/ai_research_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/__init__.py",
+      "content": "\"\"\"Main package for the AiResearchAgent application.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/api"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/__init__.py",
+      "content": "\"\"\"FastAPI application, routers, and API-specific dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/api.md",
+      "content": "# API Module Documentation\n\nThis module defines the FastAPI application, its routers, endpoints, and API-specific dependencies. It is the primary entry point for all external HTTP requests to the backend.\n\n## Guidelines\n- Routers should be organized by resource or functionality (e.g., `auth_router.py`, `project_router.py`).\n- Use Pydantic models from `protocols_schemas` or `ag_ui.core.types` for request/response validation and serialization.\n- Leverage FastAPI's dependency injection system (e.g., for database sessions, authentication).\n- AG-UI endpoints (in `endpoints/agui_*.py`) will handle Server-Sent Event (SSE) streams.\n- A2A endpoints (in `endpoints/a2a_*.py`) will conform to the A2A protocol for inter-agent communication.\n- Ensure consistent error handling and response structures.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/main_api_router.py",
+      "content": "\"\"\"Main FastAPI application router.\n\nAggregates all other routers for different API modules.\n\"\"\"\nfrom fastapi import FastAPI\n\napp = FastAPI(\n    title=\"AiResearchAgent API\",\n    version=\"1.0.0\",\n    description=\"API for the AiResearchAgent multi-agent platform.\"\n)\n\n@app.get(\"/api/v1/health\", tags=[\"General\"])\nasync def health_check():\n    return {\"status\": \"healthy\"}\n\n# Routers will be included here later, e.g.:\n# from .endpoints import (agui_orchestration_router, agui_chat_router, \n# a2a_specialized_agent_router, auth_router, project_router, \n# document_router, editor_router)\n# app.include_router(agui_orchestration_router.router, prefix=\"/api/v1/agui/orchestration\", tags=[\"AG-UI Orchestration\"])\n# app.include_router(agui_chat_router.router, prefix=\"/api/v1/agui/chat\", tags=[\"AG-UI Chat\"])\n# app.include_router(a2a_specialized_agent_router.router, prefix=\"/api/v1/a2a\", tags=[\"A2A Specialized Agents\"])\n# app.include_router(auth_router.router, prefix=\"/api/v1/auth\", tags=[\"Authentication\"])\n# app.include_router(project_router.router, prefix=\"/api/v1/projects\", tags=[\"Projects\"])\n# app.include_router(document_router.router, prefix=\"/api/v1/documents\", tags=[\"Documents\"])\n# app.include_router(editor_router.router, prefix=\"/api/v1/editor\", tags=[\"Editor\"])\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/dependencies.py",
+      "content": "\"\"\"Shared FastAPI dependencies.\n\nE.g., database sessions, authentication dependencies.\n\"\"\"\n# from sqlalchemy.orm import Session\n# from ..database_pg.session import SessionLocal\n#\n# def get_db_session():\n#     db = SessionLocal()\n#     try:\n#         yield db\n#     finally:\n#         db.close()\n"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/__init__.py",
+      "content": "\"\"\"Contains FastAPI routers for specific API endpoint groups.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/agui_orchestration_router.py",
+      "content": "\"\"\"AG-UI SSE stream for WCATOrchestratorADK lifecycle & A2A interaction visibility.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/agui_chat_router.py",
+      "content": "\"\"\"AG-UI SSE stream for user-facing chat agent interactions.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/a2a_specialized_agent_router.py",
+      "content": "\"\"\"Hosts A2A server endpoints for specialized WCAT agents.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/auth_router.py",
+      "content": "\"\"\"Authentication related endpoints (login, register, etc.).\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/project_router.py",
+      "content": "\"\"\"Endpoints for managing research projects.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/document_router.py",
+      "content": "\"\"\"Endpoints for document management (upload, metadata, etc.).\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/api/endpoints/editor_router.py",
+      "content": "\"\"\"Endpoints for document editor interactions (highlights, annotations).\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/services"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/__init__.py",
+      "content": "\"\"\"Core backend business logic services (non-agentic).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/services.md",
+      "content": "# Services Module Documentation\n\nContains the core, non-agentic backend business logic of the application. Services encapsulate specific functionalities that can be called by API endpoints or by agents.\n\n## Guidelines\n- Each service should have a clear, well-defined responsibility.\n- Services should ideally be stateless.\n- Database interactions should generally occur within services.\n- Services should not contain agentic logic.\n- Avoid direct calls to UI components or AG-UI event emission from services.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/user_auth_service.py",
+      "content": "\"\"\"Service for user authentication and authorization.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/project_management_service.py",
+      "content": "\"\"\"Service for managing research projects.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/document_processing_service.py",
+      "content": "\"\"\"Service for document processing (OCR, text extraction, chunking).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/embedding_service.py",
+      "content": "\"\"\"Service for generating text embeddings.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/browser_control_service.py",
+      "content": "\"\"\"Service for controlling web browser interactions via browser-use.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/vector_search_service.py",
+      "content": "\"\"\"Service for interacting with the vector database (e.g., ChromaDB).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/knowledge_graph_service.py",
+      "content": "\"\"\"Service for interacting with the knowledge graph database.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/policy_analysis_service.py",
+      "content": "\"\"\"Service for WCAT policy document analysis.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/legal_analysis_service.py",
+      "content": "\"\"\"Service for general WCAT legal reasoning and analysis.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/content_generation_service.py",
+      "content": "\"\"\"Service for generating content (reports, summaries) using LLMs.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/mcp_tool_gateway_service.py",
+      "content": "\"\"\"Service for interacting with remote MCP tools via mcp-use.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/document_editor_service.py",
+      "content": "\"\"\"Service for backend logic of PDF highlighting and annotations.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/interactive_chat_service.py",
+      "content": "\"\"\"Service for handling user-facing chat interactions and streaming AG-UI events.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/agent_state_manager_service.py",
+      "content": "\"\"\"Service for managing persistent state for ADK/A2A agents and logging activities.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/services/notification_service.py",
+      "content": "\"\"\"Service for sending notifications to the UI or other systems.\"\"\""
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agent",
+      "target": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/__init__.py",
+      "content": "\"\"\"ADK-built agents and A2A communication integration layer.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/agents_adk_a2a.md",
+      "content": "# Agents ADK/A2A Module Documentation\n\nHouses all agentic components built using the Google Agent Development Kit (ADK) and integrates Google's Agent-to-Agent (A2A) communication protocol.\n\n## Guidelines\n- `core_adk/`: Contains base ADK agent classes, ADK tool wrappers, and ADK runtime setup.\n- `wcat_orchestrator_adk/`: Implements the central `WCATOrchestratorADK` and its hosting service.\n- `specialized_agents/`: Contains individual specialized A2A agents. Each is an ADK agent and exposes A2A server capabilities.\n- ADK agents use `@adk.tool` decorated functions to interact with backend services.\n"
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\core",
+      "target": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk/__init__.py",
+      "content": "\"\"\"Core components for building ADK agents (base classes, tool wrappers).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\core_adk\\\\base_agent.py",
+      "target": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk/base_adk_agent.py"
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\core_adk\\\\resource_manager.py",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\core_adk\\\\state_manager.py",
+      "target": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk/adk_state_manager.py"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk/adk_tool_wrappers.py",
+      "content": "\"\"\"Wrappers for ADK agents to call non-A2A backend services as ADK tools.\n\nimport adk\nimport httpx\n\n# Example:\n# BROWSER_SERVICE_URL = \"http://localhost:8000/api/v1/browser\"\n# @adk.tool\n# async def browse_webpage(url: str) -> str:\n#     async with httpx.AsyncClient() as client:\n#         response = await client.post(f\"{BROWSER_SERVICE_URL}/scrape_url\", json={\"url\": url})\n#         response.raise_for_status()\n#         return response.json().get(\"content\", \"\")\n\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/core_adk/adk_runtime_setup.py",
+      "content": "\"\"\"Setup for ADK runtime environment, if necessary (e.g., API keys for ADK services).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\browser_use",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\collector",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\cross_reference",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\database_maintenance",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\deep_research",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\intake",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\legal_research",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\search",
+      "optional": true
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\orchestrator",
+      "target": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/wcat_orchestrator_adk_TEMP",
+      "optional": true
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/wcat_orchestrator_adk"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/wcat_orchestrator_adk/__init__.py",
+      "content": "\"\"\"The main WCAT Orchestrator ADK Agent and its hosting service.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/wcat_orchestrator_adk/agent.py",
+      "content": "\"\"\"Implementation of the WCATOrchestratorADK agent logic.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/wcat_orchestrator_adk/service_host.py",
+      "content": "\"\"\"FastAPI service hosting WCATOrchestratorADK and exposing AG-UI stream.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/__init__.py",
+      "content": "\"\"\"Specialized WCAT agents, each acting as an A2A Server and using ADK for internal logic.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/base_wcat_a2a_specialist_agent.py",
+      "content": "\"\"\"Base class for specialized A2A agents, handling A2A server boilerplate and ADK integration.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/common_wcat_adk_tools.py",
+      "content": "\"\"\"Common ADK tools specific to the WCAT domain, usable by any WCAT ADK agent.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/intake_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/intake_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/intake_agent/agent.py",
+      "content": "\"\"\"WCATIntakeA2A_Agent: ADK logic for document intake tasks.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/intake_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATIntakeA2A_Agent_V1\", \"description\": \"Handles WCAT document intake and initial processing.\", \"endpoint\": \"/api/v1/a2a/intake_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/research_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/research_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/research_agent/agent.py",
+      "content": "\"\"\"WCATResearchA2A_Agent: ADK logic for precedent and legal research.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/research_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATResearchA2A_Agent_V1\", \"description\": \"Performs WCAT precedent and legal research.\", \"endpoint\": \"/api/v1/a2a/research_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/policy_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/policy_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/policy_agent/agent.py",
+      "content": "\"\"\"WCATPolicyA2A_Agent: ADK logic for WCAT policy analysis.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/policy_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATPolicyA2A_Agent_V1\", \"description\": \"Analyzes WCAT policies.\", \"endpoint\": \"/api/v1/a2a/policy_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/drafting_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/drafting_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/drafting_agent/agent.py",
+      "content": "\"\"\"WCATDraftingA2A_Agent: ADK logic for drafting legal documents.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/drafting_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATDraftingA2A_Agent_V1\", \"description\": \"Drafts legal documents for WCAT cases.\", \"endpoint\": \"/api/v1/a2a/drafting_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/db_query_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/db_query_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/db_query_agent/agent.py",
+      "content": "\"\"\"WCATDbQueryA2A_Agent: ADK logic for querying structured databases related to WCAT cases.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/db_query_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATDbQueryA2A_Agent_V1\", \"description\": \"Queries structured databases for WCAT case information.\", \"endpoint\": \"/api/v1/a2a/db_query_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/fact_check_agent"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/fact_check_agent/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/fact_check_agent/agent.py",
+      "content": "\"\"\"WCATFactCheckA2A_Agent: ADK logic for fact-checking claims in WCAT documents.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/agents_adk_a2a/specialized_agents/fact_check_agent/agent_card.json",
+      "content": "{ \"name\": \"WCATFactCheckA2A_Agent_V1\", \"description\": \"Fact-checks claims within WCAT documents.\", \"endpoint\": \"/api/v1/a2a/fact_check_agent/execute_task\", \"skills\": [] }"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer/__init__.py",
+      "content": "\"\"\"A2A specific SDK usage, client/server handlers, and data models.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer/a2a_integration_layer.md",
+      "content": "# A2A Integration Layer Documentation\n\nProvides the specific SDK integrations and data models for A2A communication. This layer abstracts the raw A2A SDK usage for the agents.\n\n## Key Components\n- `a2a_orchestrator_client.py`: Client-side logic for the orchestrator.\n- `a2a_specialist_server_handler.py`: Common server-side logic for specialized agents.\n- `a2a_data_models.py`: Pydantic models for A2A task schemas.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer/a2a_orchestrator_client.py",
+      "content": "\"\"\"A2A client logic used by WCATOrchestratorADK to call specialized agents.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer/a2a_specialist_server_handler.py",
+      "content": "\"\"\"Common logic for specialized agents to handle A2A requests via FastAPI.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/a2a_integration_layer/a2a_data_models.py",
+      "content": "\"\"\"Pydantic models for standardizing A2A task input/output schemas.\"\"\""
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\browser",
+      "target": "AiResearchAgent/src/ai_research_agent/browser_core"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/browser_core/__init__.py",
+      "content": "\"\"\"Core browser automation functionalities using Playwright, wrapped by CustomBrowser.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/browser_core/browser_core.md",
+      "content": "# Browser Core Module Documentation\n\nThis module contains the existing `CustomBrowser` and `CustomContext` classes, which wrap Playwright for browser automation. It's used by the `BrowserControlService`.\n"
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\controller",
+      "target": "AiResearchAgent/src/ai_research_agent/controller_legacy"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/controller_legacy/__init__.py",
+      "content": "\"\"\"Legacy controller logic, to be refactored into services or ADK tools.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/controller_legacy/controller_legacy.md",
+      "content": "# Controller Legacy Module Documentation\n\nThis module contains the `CustomController` from the original codebase. Its browser automation actions will be refactored into the `BrowserControlService`.\n"
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat/__init__.py",
+      "content": "\"\"\"WCAT-specific business logic, rules, and non-DB data.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat/domain_logic_wcat.md",
+      "content": "# Domain Logic WCAT Module Documentation\n\nContains WCAT-specific business logic, classification rules, entity extraction patterns, and potentially local policy data references.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat/wcat_classification_rules.py",
+      "content": "\"\"\"Rules for classifying WCAT documents and content.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat/wcat_entity_extraction_patterns.py",
+      "content": "\"\"\"Patterns and rules for extracting WCAT-specific entities.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/domain_logic_wcat/wcat_policy_data.py",
+      "content": "\"\"\"Local storage or references for WCAT policy data if not in DB.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/__init__.py",
+      "content": "\"\"\"PostgreSQL database interaction layer (SQLAlchemy models, session, repositories).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/database_pg.md",
+      "content": "# PostgreSQL Database Module Documentation\n\nManages all interactions with the PostgreSQL database. This includes schema definitions (ORM models), session management, data access repositories, and schema migrations.\n\n## Key Components\n- `models/`: SQLAlchemy ORM models.\n- `session.py`: SQLAlchemy engine and session factory.\n- `repositories/`: (To be developed) Repository Pattern for data access.\n- `migrations/`: Alembic migration scripts.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/session.py",
+      "content": "\"\"\"SQLAlchemy session management for PostgreSQL.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/__init__.py",
+      "content": "\"\"\"SQLAlchemy ORM models for PostgreSQL.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/user_model.py",
+      "content": "\"\"\"User ORM model.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/project_model.py",
+      "content": "\"\"\"Project ORM model.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/wcat_decision_model.py",
+      "content": "\"\"\"WCAT Decision ORM model.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/highlight_model.py",
+      "content": "\"\"\"Highlight/Annotation ORM model.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/agent_activity_log_model.py",
+      "content": "\"\"\"Agent Activity Log ORM model.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/models/workflow_state_model.py",
+      "content": "\"\"\"Agent Workflow State ORM model.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/repositories"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/repositories/__init__.py",
+      "content": "\"\"\"Data Access Objects (Repositories) for database interactions.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/migrations"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_pg/migrations/README.md",
+      "content": "Alembic migrations for PostgreSQL schema.\nRun `alembic init src/ai_research_agent/database_pg/migrations` if starting fresh, then configure env.py targeting the models in `database_pg.models` and the database URL from `config_app`."
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_vector"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_vector/__init__.py",
+      "content": "\"\"\"Vector database interaction layer (e.g., ChromaDB).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_vector/database_vector.md",
+      "content": "# Vector Database Module (ChromaDB) Documentation\n\nManages all interactions with the ChromaDB vector database. Responsible for storing and searching text embeddings for semantic retrieval.\n\n## Key Components\n- `chroma_client.py`: Client logic for ChromaDB interactions.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_vector/chroma_client.py",
+      "content": "\"\"\"Client for interacting with ChromaDB vector database.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/database_graph"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_graph/__init__.py",
+      "content": "\"\"\"Graph database interaction layer (e.g., Neo4j).\n\nE.g., database sessions, authentication dependencies.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_graph/database_graph.md",
+      "content": "# Graph Database Module (Neo4j) Documentation\n\nManages all interactions with the Neo4j graph database. Used for storing and querying WCAT case relationships, entities, and knowledge graphs.\n\n## Key Components\n- `neo4j_client.py`: Client logic for Neo4j interactions.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/database_graph/neo4j_client.py",
+      "content": "\"\"\"Client for interacting with Neo4j graph database.\"\"\""
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\config",
+      "target": "AiResearchAgent/src/ai_research_agent/config_app_TEMP",
+      "optional": true
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/__init__.py",
+      "content": "\"\"\"Application configuration management using Pydantic settings.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/config_app.md",
+      "content": "# Configuration Application Module Documentation\n\nCentralizes application configuration management using Pydantic's `BaseSettings` to load configurations from environment variables and default configuration files.\n\n## Key Components\n- `pydantic_settings_models.py`: Pydantic models for settings.\n- `settings_loader.py`: Logic to load settings models.\n- `default_configs/`: Default YAML/JSON configuration files.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/settings_loader.py",
+      "content": "\"\"\"Loads application settings from environment variables and/or config files into Pydantic models.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/pydantic_settings_models.py",
+      "content": "\"\"\"Pydantic models for defining application settings structure.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/default_configs"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\config_app_TEMP\\\\agent_mcp_mapping.json",
+      "target": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/agent_mcp_mapping.json",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\config_app_TEMP\\\\mcp_servers.json",
+      "target": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/mcp_servers.json",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\config_app_TEMP\\\\mcp\\\\mcp_servers.json",
+      "target": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/mcp_servers_nested.json",
+      "optional": true
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/app_config.yaml",
+      "content": "app_name: AiResearchAgent\ndebug: false"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/config_app/default_configs/logging_config.yaml",
+      "content": "version: 1\ndisable_existing_loggers: false\nformatters:\n  simple:\n    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'\nhandlers:\n  console:\n    class: logging.StreamHandler\n    formatter: simple\n    stream: ext://sys.stdout\nroot:\n  level: INFO\n  handlers: [console]\nloggers:\n  uvicorn.error:\n    level: WARNING\n  uvicorn.access:\n    level: WARNING"
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils",
+      "target": "AiResearchAgent/src/ai_research_agent/utils_shared"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/utils_shared/__init__.py",
+      "content": "\"\"\"Shared utility functions and classes, broadly applicable across the project.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/utils_shared/utils_shared.md",
+      "content": "# Shared Utilities Module Documentation\n\nProvides common, reusable utility functions and classes. Utilities should be generic and not tied to specific business logic.\n\n## Key Components\n- `llm_factory_unified.py`: Consistent LLM access.\n- `text_processing.py`, `error_handling.py`, `observability.py`.\n"
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\env_manager.py",
+      "target": "AiResearchAgent/src/ai_research_agent/utils_shared/env_manager.py",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\unified_llm_factory.py",
+      "target": "AiResearchAgent/src/ai_research_agent/utils_shared/llm_factory_unified.py",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\path_utils.py",
+      "target": "AiResearchAgent/src/ai_research_agent/utils_shared/path_utils.py",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\rate_limiter.py",
+      "target": "AiResearchAgent/src/ai_research_agent/utils_shared/rate_limiter.py",
+      "optional": true
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\config.py",
+      "optional": true
+    },
+    {
+      "action": "delete_file",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\utils_shared\\\\llm_provider.py",
+      "optional": true
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/utils_shared/text_processing.py",
+      "content": "\"\"\"Utility functions for text processing and manipulation.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/utils_shared/error_handling.py",
+      "content": "\"\"\"Custom exception classes and error handling utilities.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/utils_shared/observability.py",
+      "content": "\"\"\"Utilities for logging, tracing, and metrics.\"\"\""
+    },
+    {
+      "action": "create_dir",
+      "path": "AiResearchAgent/src/ai_research_agent/protocols_schemas"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/protocols_schemas/__init__.py",
+      "content": "\"\"\"Pydantic models for API requests/responses and internal event structures.\nAG-UI specific types are imported from the ag-ui-protocol SDK.\n\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/protocols_schemas/protocols_schemas.md",
+      "content": "# Protocols and Schemas Module Documentation\n\nDefines Pydantic models for API request/response bodies and any internal event structures, ensuring data consistency and validation.\nAG-UI types are imported from its SDK.\n"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/protocols_schemas/api_models.py",
+      "content": "\"\"\"Custom Pydantic models for API requests and responses, beyond AG-UI's RunAgentInput.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/protocols_schemas/internal_event_models.py",
+      "content": "\"\"\"Pydantic models for any internal event bus messages, if used.\"\"\""
+    },
+    {
+      "action": "rename_dir",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\webui",
+      "target": "AiResearchAgent/src/ai_research_agent/ui_gradio"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/__init__.py",
+      "content": "\"\"\"Gradio-based user interface components and logic.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/ui_gradio.md",
+      "content": "# Gradio UI Module Documentation\n\nContains all components related to the Gradio-based user interface. This includes UI layout definitions, event handlers (which now primarily trigger backend API calls), and custom JavaScript for AG-UI integration.\n\n## Key Components\n- `interface.py`: Main Gradio application assembly.\n- `static/custom_agui_interface.js`: Core JavaScript for AG-UI SSE handling.\n"
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\ui_gradio\\\\interface.py",
+      "target": "AiResearchAgent/src/ai_research_agent/ui_gradio/interface.py",
+      "optional": true
+    },
+    {
+      "action": "move_file",
+      "source": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\ui_gradio\\\\webui_manager.py",
+      "target": "AiResearchAgent/src/ai_research_agent/ui_gradio/webui_manager.py",
+      "optional": true
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/pages/agent_activity_log_display.py",
+      "content": "\"\"\"Gradio component to display the agent activity log, populated by AG-UI events via JS.\"\"\""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/static/custom_agui_interface.js",
+      "content": "// Core JavaScript for handling AG-UI Server-Sent Events and updating Gradio UI components."
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/static/custom_styles.css",
+      "content": "/* Custom CSS styles for the Gradio interface */"
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/navigation/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/pages/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/pages/chat/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/pages/orchestrator/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/shared_components/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/static/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "create_file",
+      "path": "AiResearchAgent/src/ai_research_agent/ui_gradio/theme/__init__.py",
+      "content": ""
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\config_app_TEMP",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\agents_adk_a2a\\\\wcat_orchestrator_adk_TEMP",
+      "optional": true
+    },
+    {
+      "action": "delete_dir",
+      "path": "D:\\\\AI_Dev_Hub\\\\AiResearchAgent\\\\src\\\\ai_research_agent\\\\mcp",
+      "optional": true
+    }
+  ]
+}
