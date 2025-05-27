@@ -12,10 +12,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, create_model
 
-from src.ai_research_assistant.utils.tool_registry import (
-    ToolRegistry,
-    setup_mcp_client_and_tools,
+# Updated imports for MCP refactor
+from src.ai_research_assistant.mcp.manager import (
+    MCPManager,
+    get_mcp_manager_instance,
 )
+from src.ai_research_assistant.config.mcp_config import MCPConfigLoader
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ class CustomController(Controller):
         super().__init__(exclude_actions=exclude_actions, output_model=output_model)
         self._register_custom_actions()
         self.ask_assistant_callback = ask_assistant_callback
-        self.mcp_client: Optional[ToolRegistry] = None
+        self.mcp_manager_instance: Optional[MCPManager] = None # Changed from mcp_client
         self.mcp_server_config: Optional[Dict[str, Any]] = None
 
     def _register_custom_actions(self):
@@ -175,16 +177,16 @@ class CustomController(Controller):
             "enable_mcp_integration", True
         ):
             try:
-                self.mcp_client = await setup_mcp_client_and_tools()
-                if self.mcp_client and self.mcp_client.tools:
+                self.mcp_manager_instance = await get_mcp_manager_instance() # Changed
+                if self.mcp_manager_instance and self.mcp_manager_instance.get_all_loaded_tools(): # Changed
                     self.register_mcp_tools()
-                elif self.mcp_client:
+                elif self.mcp_manager_instance: # Changed
                     logger.info(
-                        "MCP Client initialized, but no tools were loaded. Check mcp.json configuration and server availability."
+                        "MCP Manager initialized, but no tools were loaded. Check mcp.json configuration and server availability."
                     )
                 else:
                     logger.warning(
-                        "Failed to initialize MCP client from tool_registry."
+                        "Failed to initialize MCP Manager from mcp.manager."
                     )
             except FileNotFoundError as e:
                 logger.warning(f"MCP setup skipped: {e}")
@@ -195,62 +197,87 @@ class CustomController(Controller):
 
     def register_mcp_tools(self):
         """
-        Register the MCP tools obtained from the ToolRegistry.
+        Registers MCP tools with the controller.
+        It fetches all available tools from MCPManager and then filters them
+        based on the current agent type using MCPConfigLoader.
         """
-        if self.mcp_client and self.mcp_client.tools:
-            registered_tool_count = 0
-            for tool_instance in self.mcp_client.tools:
-                if not isinstance(tool_instance, BaseTool):
-                    logger.warning(
-                        f"Skipping non-BaseTool object in mcp_client.tools: {tool_instance}"
-                    )
-                    continue
+        if not self.mcp_manager_instance or not self.mcp_manager_instance.get_all_loaded_tools():
+            logger.warning("MCP Manager not initialized or no tools loaded. Cannot register MCP tools.")
+            return
 
-                final_tool_name = tool_instance.name
+        all_mcp_tools = self.mcp_manager_instance.get_all_loaded_tools()
+        if not all_mcp_tools:
+            logger.info("No MCP tools available from MCP Manager.")
+            return
 
-                try:
-                    param_model_class: Type[BaseModel]
-                    if tool_instance.args_schema is None:
-                        logger.warning(
-                            f"MCP tool {final_tool_name} has no args_schema. Creating a default one."
-                        )
-                        param_model_class = create_model(
-                            f"{final_tool_name.replace('_', '').title()}DefaultParams"
-                        )
-                    else:
-                        param_model_class = tool_instance.args_schema
+        config_loader = MCPConfigLoader()
+        # TODO: Determine agent_type dynamically if CustomController is used by multiple agent types.
+        # For now, using a generic placeholder. This should match a key in agent_mcp_mapping.json.
+        agent_type = "CustomControllerAgent" 
+        specific_tool_names = config_loader.get_agent_tools(agent_type)
 
-                    registered_action = RegisteredAction(
-                        name=final_tool_name,
-                        description=tool_instance.description,
-                        function=tool_instance,
-                        param_model=param_model_class,
-                    )
-                    self.registry.registry.actions[final_tool_name] = registered_action
-                    logger.info(
-                        f"Registered MCP tool: {final_tool_name} with description: {tool_instance.description[:50]}..."
-                    )
-                    registered_tool_count += 1
-                except Exception as e:
-                    logger.error(
-                        f"Failed to register MCP tool {final_tool_name}: {e}",
-                        exc_info=True,
-                    )
-                    continue
-            logger.info(
-                f"Registered {registered_tool_count} MCP tools from ToolRegistry."
-            )
-        elif self.mcp_client and not self.mcp_client.tools:
-            logger.info(
-                "MCP client is initialized, but no tools were found in the registry."
-            )
+        tools_to_register: List[BaseTool]
+        if specific_tool_names:
+            logger.info(f"Found specific tool mapping for agent type '{agent_type}'. Filtering tools: {specific_tool_names}")
+            # Ensure a map for quick lookup if specific_tool_names is long
+            specific_tool_names_set = set(specific_tool_names)
+            tools_to_register = [t for t in all_mcp_tools if t.name in specific_tool_names_set]
+            if not tools_to_register and all_mcp_tools:
+                logger.warning(f"Agent type '{agent_type}' requested specific tools, but none of them were found among the loaded MCP tools. Loaded tools: {[t.name for t in all_mcp_tools]}")
         else:
-            logger.warning(
-                "MCP client not started or no tools available, cannot register MCP tools."
-            )
+            logger.info(f"No specific tool mapping found for agent type '{agent_type}'. Registering all available MCP tools ({len(all_mcp_tools)} tools).")
+            tools_to_register = all_mcp_tools
+
+        if not tools_to_register:
+            logger.info(f"No MCP tools to register for agent type '{agent_type}'.")
+            return
+
+        registered_tool_count = 0
+        for tool_instance in tools_to_register:
+            if not isinstance(tool_instance, BaseTool):
+                logger.warning(f"Skipping non-BaseTool object: {tool_instance}")
+                continue
+
+            final_tool_name = tool_instance.name
+
+            try:
+                param_model_class: Type[BaseModel]
+                if tool_instance.args_schema is None:
+                    logger.warning(
+                        f"MCP tool {final_tool_name} has no args_schema. Creating a default one."
+                    )
+                    # Ensure the generated name is valid for a class
+                    model_name = f"{final_tool_name.replace('_', '').replace('.', '').title()}DefaultParams"
+                    param_model_class = create_model(model_name)
+                else:
+                    # We expect tool_instance.args_schema to be Type[BaseModel]
+                    # If linter still complains, it might be a false positive or a deeper type issue
+                    # with how ArgsSchema is inferred by the linter.
+                    param_model_class = tool_instance.args_schema
+                
+                registered_action = RegisteredAction(
+                    name=final_tool_name,
+                    description=tool_instance.description,
+                    function=tool_instance,  # Store the BaseTool instance itself
+                    param_model=param_model_class,
+                )
+                self.registry.registry.actions[final_tool_name] = registered_action
+                logger.info(
+                    f"Registered MCP tool: {final_tool_name} with description: {tool_instance.description[:70]}..."
+                )
+                registered_tool_count += 1
+            except Exception as e:
+                logger.error(
+                    f"Failed to register MCP tool {final_tool_name}: {e}",
+                    exc_info=True,
+                )
+                continue
+        logger.info(
+            f"Successfully registered {registered_tool_count} MCP tools for agent type '{agent_type}'."
+        )
 
     async def close_mcp_client(self):
-        if self.mcp_client:
-            await self.mcp_client.close()
-            self.mcp_client = None
-            logger.info("MCP client closed and resources released.")
+        if self.mcp_manager_instance: # Changed
+            await self.mcp_manager_instance.close_connections() # Changed to close_connections
+            self.mcp_manager_instance = None # Changed
+            logger.info("MCP Manager closed and resources released.")

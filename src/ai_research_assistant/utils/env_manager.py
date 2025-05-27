@@ -8,9 +8,12 @@ and configuration handling for all LLM providers and services.
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
+
+from ai_research_assistant.config.mcp_config import ServerConfig # MCP Server config model
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +183,44 @@ class EnvironmentManager:
 
         return configured_providers
 
+    def load_mcp_server_configs(self, mcp_config_path: Optional[Path] = None) -> List[ServerConfig]:
+        """Load MCP server configurations from a JSON file."""
+        if mcp_config_path is None:
+            # Default to project_root/config/mcp_servers.json
+            # Assuming env_manager.py is in src/ai_research_assistant/utils/
+            # Project root is 3 levels up from this file's parent
+            # Project root is 3 levels up from this file's parent (utils -> ai_research_assistant -> src)
+            project_root = Path(__file__).resolve().parent.parent.parent
+            mcp_config_path = project_root / "src" / "ai_research_assistant" / "config" / "mcp_servers.json"
+
+        if not mcp_config_path.exists():
+            logger.warning(f"MCP server configuration file not found: {mcp_config_path}")
+            return []
+
+        try:
+            with open(mcp_config_path, "r") as f:
+                data = json.load(f)
+            
+            server_configs_data = data.get("mcp_server_configs", [])
+            
+            parsed_configs = []
+            for i, config_data in enumerate(server_configs_data):
+                try:
+                    parsed_configs.append(ServerConfig(**config_data))
+                except Exception as e:
+                    logger.error(f"Error parsing MCP server config #{i+1} at {mcp_config_path}: {e}\nData: {config_data}")
+            
+            logger.info(f"Successfully loaded {len(parsed_configs)} MCP server configurations from {mcp_config_path}")
+            return parsed_configs
+        except Exception as e:
+            logger.error(f"Failed to load or parse MCP server configurations from {mcp_config_path}: {e}")
+            return []
+
 
 # Global environment manager instance
 env_manager = EnvironmentManager()
+
+def get_mcp_server_configs(custom_path: Optional[str] = None) -> List[ServerConfig]:
+    """Helper function to get loaded MCP server configurations."""
+    path_obj = Path(custom_path) if custom_path else None
+    return env_manager.load_mcp_server_configs(mcp_config_path=path_obj)

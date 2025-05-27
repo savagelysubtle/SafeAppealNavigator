@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import gradio as gr
 
@@ -7,12 +7,18 @@ class NavItem:
     """Represents a single navigation item."""
 
     def __init__(
-        self, icon: str, label: str, page_id: str, action: Optional[Callable] = None
+        self,
+        icon: str,
+        label: str,
+        value: str,
+        is_group: bool = False,
+        children: Optional[List["NavItem"]] = None,
     ):
         self.icon = icon
         self.label = label
-        self.page_id = page_id
-        self.action = action  # Optional direct action
+        self.value = value  # Corresponds to the page/tab to show or a group identifier
+        self.is_group = is_group
+        self.children: List["NavItem"] = children if children else []
 
 
 class NavGroup:
@@ -32,12 +38,73 @@ class NavigationRail:
     Manages page switching logic.
     """
 
-    def __init__(self, webui_manager, default_page_id: str = "orchestrator_page"):
-        self.webui_manager = webui_manager
+    def __init__(self, webui_manager):
+        self.webui_manager = webui_manager  # To call back for page changes
+        self.nav_items: List[NavItem] = [
+            NavItem(icon="🎯", label="Orchestrator", value="orchestrator_page"),
+            NavItem(
+                icon="👥",
+                label="Agents",
+                value="agents_group",
+                is_group=True,
+                children=[
+                    NavItem(icon="📥", label="Intake", value="intake_agent_page"),
+                    NavItem(icon="🔍", label="Search", value="search_agent_page"),
+                    NavItem(
+                        icon="🔗",
+                        label="Cross-Reference",
+                        value="cross_reference_agent_page",
+                    ),
+                    NavItem(
+                        icon="🛠️",
+                        label="DB Maintenance",
+                        value="db_maintenance_agent_page",
+                    ),
+                    NavItem(
+                        icon="⚖️",
+                        label="Legal Research",
+                        value="legal_research_agent_page",
+                    ),
+                    NavItem(
+                        icon="🔬",
+                        label="Deep Research",
+                        value="deep_research_agent_page",
+                    ),
+                    NavItem(icon="🌐", label="Browser", value="browser_agent_page"),
+                    NavItem(icon="📚", label="Collector", value="collector_agent_page"),
+                ],
+            ),
+            NavItem(
+                icon="⚙️",
+                label="Tools & Settings",
+                value="tools_settings_group",
+                is_group=True,
+                children=[
+                    NavItem(
+                        icon="🔧", label="MCP Marketplace", value="mcp_marketplace_page"
+                    ),
+                    NavItem(
+                        icon="⚙️", label="Global Settings", value="global_settings_page"
+                    ),
+                    NavItem(
+                        icon="💾",
+                        label="Config Load/Save",
+                        value="load_save_config_page",
+                    ),
+                    NavItem(
+                        icon="🤖", label="Agent Settings", value="agent_settings_page"
+                    ),
+                ],
+            ),
+            NavItem(icon="💬", label="Chat", value="chat_page"),
+        ]
+        self.selected_value = gr.State(
+            self.nav_items[0].value if self.nav_items else None
+        )
         self.nav_structure: List[Union[NavItem, NavGroup]] = []
         self.page_buttons: Dict[str, gr.Button] = {}
         self.page_container: Optional[gr.Column] = None
-        self.default_page_id = default_page_id
+        self.default_page_id = "orchestrator_page"
         self._define_nav_structure()
         self.nav_column_ui: Optional[gr.Column] = None
 
@@ -61,7 +128,6 @@ class NavigationRail:
                     NavItem("⚖️", "Legal Research", "legal_research_page"),
                     NavItem("📊", "Collector Agent", "collector_agent_page"),
                     NavItem("🔗", "Cross Reference", "cross_reference_page"),
-                    # NavItem("🔧", "DB Maintenance", "db_maintenance_page"), # Example if needed
                 ],
                 initially_expanded=False,
             ),
@@ -71,7 +137,6 @@ class NavigationRail:
                 [
                     NavItem("🛠️", "Tools", "tools_page"),
                     NavItem("⚙️", "Settings", "settings_page"),
-                    # NavItem("💾", "Config Mgmt", "config_mgmt_page"), # Example
                 ],
                 initially_expanded=False,
             ),
@@ -93,20 +158,18 @@ class NavigationRail:
         self.nav_column_ui = nav_column
         return self.nav_column_ui
 
-    def _create_nav_button(self, nav_item: NavItem, is_sub_item: bool = False):
+    def _create_nav_button(self, nav_item: NavItem):
         """Helper to create a single navigation button."""
-        label = f"{nav_item.icon} {nav_item.label}"
-        elem_classes = ["nav-button"]
-        if is_sub_item:
-            elem_classes.append("nav-sub-button")
-
-        button = gr.Button(label, elem_classes=elem_classes)
-        button.click(
-            fn=lambda page_id=nav_item.page_id: self._handle_page_selection(page_id),
-            inputs=[],
-            outputs=[],  # Outputs will be handled by the main interface to update page_container
+        button = gr.Button(
+            value=f"{nav_item.icon} {nav_item.label}",
+            elem_id=f"nav-btn-{nav_item.value}",
         )
-        self.page_buttons[nav_item.page_id] = button
+        button.click(
+            fn=self.webui_manager.set_current_page,
+            inputs=[gr.Textbox(value=nav_item.value, visible=False)],
+            outputs=[],  # Output will be the main content area, handled by WebuiManager
+        )
+        self.page_buttons[nav_item.value] = button
         return button
 
     def _create_nav_group(self, nav_group: NavGroup):
@@ -115,7 +178,7 @@ class NavigationRail:
             nav_group.label, open=nav_group.initially_expanded, elem_classes="nav-group"
         ):
             for item in nav_group.items:
-                self._create_nav_button(item, is_sub_item=True)
+                self._create_nav_button(item)
 
     def _handle_page_selection(self, page_id: str):
         """Handles the logic when a navigation button is clicked."""
@@ -162,3 +225,53 @@ class NavigationRail:
         # This is a bit of a hack to ensure the default page content is loaded.
         # The main interface will listen to this hidden component.
         return self.default_page_id
+
+    def render(self) -> gr.Column:
+        """Renders the navigation rail using Gradio components."""
+        with gr.Column(
+            elem_id="navigation-rail", scale=1, min_width=200
+        ) as rail_column:
+            # Potentially a logo or title can go here
+            gr.Markdown("### NAVIGATION", elem_id="nav-header")
+
+            for item in self.nav_items:
+                if item.is_group:
+                    with gr.Accordion(
+                        label=f"{item.icon} {item.label}",
+                        open=False,
+                        elem_id=f"nav-group-{item.value}",
+                    ):
+                        for child_item in item.children:
+                            self._create_nav_button(child_item)
+                else:
+                    self._create_nav_button(item)
+        return rail_column
+
+    # def handle_nav_click(self, nav_value: str):
+    #     """Handles the navigation item click and updates the selected state."""
+    #     # This function will be called by WebUI manager to update the main content area
+    #     # For now, just update the state which can be observed.
+    #     return nav_value
+
+
+# Example usage (conceptual, will be integrated into the main WebUI):
+# if __name__ == "__main__":
+#     nav_rail = NavigationRail()
+#     with gr.Blocks(theme=ModernDarkTheme()) as demo:
+#         with gr.Row():
+#             selected_page_value = nav_rail.render()
+#             with gr.Column(scale=4):
+#                 gr.Markdown("## Main Content Area")
+#                 gr.Textbox(label="Selected Page", value=selected_page_value)
+#
+#                 # Example of how to show/hide content based on selected_page_value
+#                 # This logic will be in the main UI manager
+#                 for item in nav_rail.nav_items:
+#                     if not item.is_group:
+#                         with gr.Box(visible=(selected_page_value == item.value)):
+#                             gr.Markdown(f"### Content for {item.label}")
+#                     else:
+#                         for child in item.children:
+#                             with gr.Box(visible=(selected_page_value == child.value)):
+#                                 gr.Markdown(f"### Content for {child.label}")
+#     demo.launch()

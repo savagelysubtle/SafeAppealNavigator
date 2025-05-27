@@ -1,0 +1,18 @@
+{
+  "mcp_server_configs": [
+    {
+      "name": "EchoTestServerStdio",
+      "type": "stdio",
+      "stdio_config": {
+        "command": [
+          "python",
+          "D:\\AI_Dev_Hub\\AiResearchAgent\\tests\\mcp_servers\\echo_server.py"
+        ],
+        "cwd": "D:\\AI_Dev_Hub\\AiResearchAgent"
+      },
+      "auto_approve_tools": ["echo"],
+      "disabled": false,
+      "timeout_seconds": 30
+    }
+  ]
+}
