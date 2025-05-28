@@ -18,7 +18,7 @@ from src.ai_research_assistant.agent.legal_research.legal_case_agent import (
 )
 from src.ai_research_assistant.browser.custom_browser import CustomBrowser
 from src.ai_research_assistant.browser.custom_context import CustomBrowserContext
-from src.ai_research_assistant.config.mcp_client_config import mcp_config
+from src.ai_research_assistant.config.mcp_config import mcp_config
 from src.ai_research_assistant.controller.custom_controller import CustomController
 
 

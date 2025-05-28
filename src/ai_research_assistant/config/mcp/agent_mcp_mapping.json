@@ -4,10 +4,10 @@
       "required_servers": ["unified_local_server"],
       "optional_servers": ["legal_server"],
       "primary_tools": [
-        "cursor_db",
-        "file_tree",
-        "text_processing",
-        "vector_database"
+        "mcp_unified_local_server_cursor_db",
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing",
+        "mcp_unified_local_server_vector_database"
       ],
       "tool_preferences": {
         "document_search": "vector_database",
@@ -21,10 +21,10 @@
       "required_servers": ["unified_local_server"],
       "optional_servers": ["research_server"],
       "primary_tools": [
-        "codebase_ingest",
-        "file_tree",
-        "vector_database",
-        "text_processing"
+        "mcp_unified_local_server_codebase_ingest",
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_vector_database",
+        "mcp_unified_local_server_text_processing"
       ],
       "tool_preferences": {
         "code_analysis": "codebase_ingest",
@@ -37,7 +37,10 @@
     "BrowserUseAgent": {
       "required_servers": [],
       "optional_servers": ["unified_local_server"],
-      "primary_tools": ["file_tree", "text_processing"],
+      "primary_tools": [
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing"
+      ],
       "tool_preferences": {
         "file_operations": "file_tree",
         "content_analysis": "text_processing"
@@ -48,14 +51,14 @@
       "required_servers": ["unified_local_server", "filesystem_server"],
       "optional_servers": [],
       "primary_tools": [
-        "file_tree",
-        "vector_database",
-        "text_processing",
-        "read_file",
-        "write_file",
-        "create_directory",
-        "move_file",
-        "get_file_info"
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_vector_database",
+        "mcp_unified_local_server_text_processing",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_write_file",
+        "mcp_filesystem_server_create_directory",
+        "mcp_filesystem_server_move_file",
+        "mcp_filesystem_server_get_file_info"
       ],
       "tool_preferences": {
         "file_operations": "file_tree",
@@ -70,15 +73,15 @@
       "required_servers": ["unified_local_server", "filesystem_server"],
       "optional_servers": [],
       "primary_tools": [
-        "file_tree",
-        "text_processing",
-        "read_file",
-        "write_file",
-        "list_directory",
-        "create_directory",
-        "move_file",
-        "get_file_info",
-        "read_multiple_files"
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_write_file",
+        "mcp_filesystem_server_list_directory",
+        "mcp_filesystem_server_create_directory",
+        "mcp_filesystem_server_move_file",
+        "mcp_filesystem_server_get_file_info",
+        "mcp_filesystem_server_read_multiple_files"
       ],
       "tool_preferences": {
         "file_operations": "file_tree",
@@ -92,20 +95,20 @@
       "required_servers": ["unified_local_server", "filesystem_server"],
       "optional_servers": ["legal_server"],
       "primary_tools": [
-        "file_tree",
-        "text_processing",
-        "vector_database",
-        "read_file",
-        "write_file",
-        "list_directory",
-        "create_directory",
-        "move_file",
-        "search_files",
-        "get_file_info",
-        "read_multiple_files",
-        "directory_tree",
-        "zip_directory",
-        "unzip_file"
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing",
+        "mcp_unified_local_server_vector_database",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_write_file",
+        "mcp_filesystem_server_list_directory",
+        "mcp_filesystem_server_create_directory",
+        "mcp_filesystem_server_move_file",
+        "mcp_filesystem_server_search_files",
+        "mcp_filesystem_server_get_file_info",
+        "mcp_filesystem_server_read_multiple_files",
+        "mcp_filesystem_server_directory_tree",
+        "mcp_filesystem_server_zip_directory",
+        "mcp_filesystem_server_unzip_file"
       ],
       "tool_preferences": {
         "file_operations": "file_tree",
@@ -122,15 +125,15 @@
       "required_servers": ["unified_local_server", "filesystem_server"],
       "optional_servers": [],
       "primary_tools": [
-        "cursor_db",
-        "file_tree",
-        "read_file",
-        "write_file",
-        "list_directory",
-        "move_file",
-        "get_file_info",
-        "zip_directory",
-        "unzip_file"
+        "mcp_unified_local_server_cursor_db",
+        "mcp_unified_local_server_file_tree",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_write_file",
+        "mcp_filesystem_server_list_directory",
+        "mcp_filesystem_server_move_file",
+        "mcp_filesystem_server_get_file_info",
+        "mcp_filesystem_server_zip_directory",
+        "mcp_filesystem_server_unzip_file"
       ],
       "tool_preferences": {
         "database_operations": "cursor_db",
@@ -145,12 +148,12 @@
       "required_servers": ["unified_local_server"],
       "optional_servers": ["filesystem_server"],
       "primary_tools": [
-        "file_tree",
-        "text_processing",
-        "vector_database",
-        "read_file",
-        "read_multiple_files",
-        "get_file_info"
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing",
+        "mcp_unified_local_server_vector_database",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_read_multiple_files",
+        "mcp_filesystem_server_get_file_info"
       ],
       "tool_preferences": {
         "file_operations": "file_tree",
@@ -164,12 +167,12 @@
       "required_servers": ["unified_local_server"],
       "optional_servers": ["filesystem_server"],
       "primary_tools": [
-        "vector_database",
-        "text_processing",
-        "file_tree",
-        "search_files",
-        "get_file_info",
-        "directory_tree"
+        "mcp_unified_local_server_vector_database",
+        "mcp_unified_local_server_text_processing",
+        "mcp_unified_local_server_file_tree",
+        "mcp_filesystem_server_search_files",
+        "mcp_filesystem_server_get_file_info",
+        "mcp_filesystem_server_directory_tree"
       ],
       "tool_preferences": {
         "semantic_search": "vector_database",
@@ -183,15 +186,15 @@
       "required_servers": ["unified_local_server", "filesystem_server"],
       "optional_servers": ["legal_server"],
       "primary_tools": [
-        "cursor_db",
-        "file_tree",
-        "text_processing",
-        "vector_database",
-        "read_file",
-        "write_file",
-        "create_directory",
-        "get_file_info",
-        "search_files"
+        "mcp_unified_local_server_cursor_db",
+        "mcp_unified_local_server_file_tree",
+        "mcp_unified_local_server_text_processing",
+        "mcp_unified_local_server_vector_database",
+        "mcp_filesystem_server_read_file",
+        "mcp_filesystem_server_write_file",
+        "mcp_filesystem_server_create_directory",
+        "mcp_filesystem_server_get_file_info",
+        "mcp_filesystem_server_search_files"
       ],
       "tool_preferences": {
         "case_storage": "cursor_db",
