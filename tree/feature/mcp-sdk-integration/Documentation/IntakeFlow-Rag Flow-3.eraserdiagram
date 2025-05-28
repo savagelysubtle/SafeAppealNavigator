@@ -1,0 +1,38 @@
+flowchart-diagram
+
+title Rag Flow
+
+// Nodes and groups
+Start Query from Orchestrator [shape: oval, color: lightblue, icon: user]
+Start Query from User [shape: oval, color: lightblue, icon: user]
+
+Parallel Search [color: purple, icon: shuffle] {
+  Keyword Search on LegalCaseDatabase [icon: database, color: orange]
+  Semantic Search on Vector Store [icon: search, color: teal]
+}
+
+Aggregate and Rank Results [icon: layers, color: blue]
+Satisfactory Results? [shape: diamond, icon: check-square, color: yellow]
+
+Return Aggregated Results [shape: oval, color: lightgreen, icon: send]
+
+Fallback to Research [color: pink, icon: search] {
+  Trigger ResearchAgent [icon: globe, color: pink]
+  External Search [icon: globe, color: pink]
+  Return Research Results [shape: oval, color: lightgreen, icon: send]
+}
+
+// Relationships
+
+
+Aggregate and Rank Results > Satisfactory Results?
+
+Satisfactory Results? > Return Aggregated Results: Yes
+Satisfactory Results? > Trigger ResearchAgent: No
+
+Trigger ResearchAgent > External Search
+External Search > Return Research Results
+Start Query from Orchestrator > Parallel Search
+Start Query from User > Parallel Search
+Aggregate and Rank Results < Parallel Search
+

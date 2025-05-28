@@ -7,7 +7,7 @@ This module provides centralized configuration management including:
 - Development and runtime settings
 """
 
-from .mcp_client_config import (
+from .mcp_config import (
     MCPConfigLoader,
     get_agent_mcp_tools,
     get_server_startup_config,

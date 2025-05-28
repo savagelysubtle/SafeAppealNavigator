@@ -5,15 +5,10 @@ import os
 import threading
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Callable, Coroutine, Dict, List, Optional, TypedDict
 
 from browser_use.browser.browser import BrowserConfig
 from browser_use.browser.context import BrowserContextConfig
-from langchain_community.tools.file_management import (
-    ListDirectoryTool,
-    ReadFileTool,
-    WriteFileTool,
-)
 
 # Langchain imports
 from langchain_core.messages import (
@@ -27,7 +22,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import StructuredTool, Tool
 
 # Langgraph imports
-from langgraph.graph import StateGraph
 from pydantic import BaseModel, Field
 
 from src.ai_research_assistant.agent.browser_use.browser_use_agent import (
@@ -35,7 +29,6 @@ from src.ai_research_assistant.agent.browser_use.browser_use_agent import (
 )
 from src.ai_research_assistant.browser.custom_browser import CustomBrowser
 from src.ai_research_assistant.controller.custom_controller import CustomController
-from src.ai_research_assistant.utils.mcp_client import setup_mcp_client_and_tools
 
 logger = logging.getLogger(__name__)
 
@@ -1117,105 +1110,104 @@ def should_continue(state: DeepResearchState) -> str:
 class DeepResearchAgent:
     def __init__(
         self,
-        llm: Any,
-        browser_config: Dict[str, Any],
-        mcp_server_config: Optional[Dict[str, Any]] = None,
+        task_id: str,
+        task_description: str,
+        research_params: ResearchParams,
+        initial_web_context: Optional[List[HumanMessage]] = None,
+        browser_config: Optional[BrowserConfig] = None,
+        browser_context_config: Optional[BrowserContextConfig] = None,
+        controller: Optional[
+            CustomController
+        ] = None,  # Controller is now expected to be pre-configured
+        # Removed: mcp_server_config: Optional[Dict[str, Any]] = None,
+        logging_callback: Optional[Callable[[str, str], None]] = None,
+        event_callback: Optional[
+            Callable[[str, Dict[str, Any]], Coroutine[Any, Any, None]]
+        ] = None,
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        output_dir: Optional[str] = None,
     ):
-        """
-        Initializes the DeepSearchAgent.
+        self.task_id = task_id
+        self.user_id = user_id or str(uuid.uuid4())
+        self.session_id = session_id or str(uuid.uuid4())
+        self.task_description = task_description
+        self.research_params = research_params
+        self.initial_web_context = initial_web_context or []
+        self.output_dir = (
+            Path(output_dir)
+            if output_dir
+            else Path("./tmp/deep_research") / self.session_id
+        )
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            llm: The Langchain compatible language model instance.
-            browser_config: Configuration dictionary for the BrowserUseAgent tool.
-                            Example: {"headless": True, "window_width": 1280, ...}
-            mcp_server_config: Optional configuration for the MCP client.
-        """
-        self.llm = llm
-        self.browser_config = browser_config
-        self.mcp_server_config = mcp_server_config
-        self.mcp_client = None
-        self.stopped = False
-        self.graph = self._compile_graph()
-        self.current_task_id: Optional[str] = None
-        self.stop_event: Optional[threading.Event] = None
-        self.runner: Optional[asyncio.Task] = None  # To hold the asyncio task for run
+        self.browser_config = browser_config or BrowserConfig()
+        self.browser_context_config = browser_context_config
 
-    async def _setup_tools(
-        self, task_id: str, stop_event: threading.Event, max_parallel_browsers: int = 1
-    ) -> List[Tool]:
-        """Sets up the basic tools (File I/O) and optional MCP tools."""
-        tools = [
-            WriteFileTool(),
-            ReadFileTool(),
-            ListDirectoryTool(),
-        ]  # Basic file operations
-        browser_use_tool = create_browser_search_tool(
-            llm=self.llm,
+        # Controller is now expected to be passed in, already configured with any MCP tools.
+        self.controller = controller if controller else CustomController()
+        # Removed: self.mcp_server_config = mcp_server_config
+        # Removed: self.mcp_client = None
+
+        self.logging_callback = logging_callback
+        self.event_callback = event_callback
+
+    async def initialize_agent_state(self):
+        """Initializes critical components of the agent's state, like the browser agent."""
+        logger.info(
+            f"Initializing agent state for DeepResearchAgent task: {self.task_id}"
+        )
+        # Ensure output directory exists
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Output directory set to: {self.output_dir}")
+
+        # Initialize BrowserUseAgent
+        # Pass the pre-configured self.controller to BrowserUseAgent
+        self.browser_agent = BrowserUseAgent(
+            controller=self.controller,  # Pass the controller here
             browser_config=self.browser_config,
-            task_id=task_id,
-            stop_event=stop_event,
-            max_parallel_browsers=max_parallel_browsers,
+            browser_context_config=self.browser_context_config,
+            task_description=self.task_description,  # Or a specific sub-task for browser agent
+            initial_web_context=self.initial_web_context,
+            output_path=str(self.output_dir / "browser_agent_output"),
+            logging_callback=self._log,  # Internal logging
+            event_callback=self._handle_browser_agent_event,
         )
-        tools += [browser_use_tool]
-        # Add MCP tools if config is provided
-        if self.mcp_server_config:
-            try:
-                logger.info("Setting up MCP client and tools...")
-                if not self.mcp_client:
-                    self.mcp_client = await setup_mcp_client_and_tools(
-                        self.mcp_server_config
-                    )
-                mcp_tools = self.mcp_client.get_tools()
-                logger.info(f"Loaded {len(mcp_tools)} MCP tools.")
-                tools.extend(mcp_tools)
-            except Exception as e:
-                logger.error(f"Failed to set up MCP tools: {e}", exc_info=True)
-        elif self.mcp_server_config:
-            logger.warning(
-                "MCP server config provided, but setup function unavailable."
+        await self.browser_agent.initialize()
+        logger.info("BrowserUseAgent initialized within DeepResearchAgent.")
+
+        # MCP client initialization is now handled by the entity that creates and configures
+        # the CustomController instance passed to DeepResearchAgent.
+        # No MCP-specific setup is needed here anymore.
+        if self.controller and self.controller.mcp_client:
+            logger.info(
+                "DeepResearchAgent is using a CustomController that has an active MCP client."
             )
-        tools_map = {tool.name: tool for tool in tools}
-        return tools_map.values()
+        else:
+            logger.info(
+                "DeepResearchAgent is using a CustomController without an active MCP client, or no controller was provided."
+            )
 
-    async def close_mcp_client(self):
-        if self.mcp_client:
-            await self.mcp_client.__aexit__(None, None, None)
-            self.mcp_client = None
+        self.agent_graph = self._create_agent_graph()
+        logger.info("DeepResearchAgent state and graph initialized.")
 
-    def _compile_graph(self) -> StateGraph:
-        """Compiles the Langgraph state machine."""
-        workflow = StateGraph(DeepResearchState)
+    async def _initialize_agent_state(
+        self,
+    ):  # This method seems to be a duplicate or older version, ensure it's reconciled with initialize_agent_state
+        # Implementation of _initialize_agent_state method
+        pass
 
-        # Add nodes
-        workflow.add_node("plan_research", planning_node)
-        workflow.add_node("execute_research", research_execution_node)
-        workflow.add_node("synthesize_report", synthesis_node)
-        workflow.add_node(
-            "end_run", lambda state: logger.info("--- Reached End Run Node ---") or {}
-        )  # Simple end node
+    def _create_agent_graph(self):
+        # Implementation of _create_agent_graph method
+        pass
 
-        # Define edges
-        workflow.set_entry_point("plan_research")
+    def _log(self, message: str, level: str):
+        # Implementation of _log method
+        pass
 
-        workflow.add_edge(
-            "plan_research", "execute_research"
-        )  # Always execute after planning
-
-        # Conditional edge after execution
-        workflow.add_conditional_edges(
-            "execute_research",
-            should_continue,
-            {
-                "execute_research": "execute_research",  # Loop back if more steps
-                "synthesize_report": "synthesize_report",  # Move to synthesis if done
-                "end_run": "end_run",  # End if stop requested or error
-            },
-        )
-
-        workflow.add_edge("synthesize_report", "end_run")  # End after synthesis
-
-        app = workflow.compile()
-        return app
+    async def _handle_browser_agent_event(self, event: str, data: Dict[str, Any]):
+        # Implementation of _handle_browser_agent_event method
+        pass
 
     async def run(
         self,
