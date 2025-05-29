@@ -19,8 +19,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
-from ...utils.llm_provider import get_llm_model
-from ...utils.unified_llm_factory import UnifiedLLMFactory
+from ..utils.llm_provider import get_llm_model
+from ..utils.unified_llm_factory import UnifiedLLMFactory
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +206,7 @@ class BaseAgent(ABC):
             logger.error(f"Failed to initialize LLM provider {self.llm_provider}: {e}")
             # Fallback to first available provider
             try:
-                from ...utils.llm_provider import get_configured_providers
+                from ..utils.llm_provider import get_configured_providers
 
                 available_providers = get_configured_providers()
                 if available_providers:
