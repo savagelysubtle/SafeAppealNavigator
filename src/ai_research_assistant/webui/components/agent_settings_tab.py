@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 import gradio as gr
 
-from src.ai_research_assistant.utils import config
+from src.ai_research_assistant.core import config
 from src.ai_research_assistant.webui.webui_manager import WebuiManager
 
 logger = logging.getLogger(__name__)

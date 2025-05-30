@@ -1,0 +1,56 @@
+{
+  "agent_id": "chief_legal_orchestrator_001",
+  "agent_name": "ChiefLegalOrchestrator",
+  "agent_type": "Orchestrator",
+  "description": "Central coordinator for legal research workflows. Manages the overall Task Graph and delegates to Coordinator Agents.",
+  "a2a_url_template": "http://{host}:{port}",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "name": "handle_full_research_workflow",
+      "description": "Initiates and manages a full legal research workflow based on a user query and initial documents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "user_query": {"type": "string"},
+          "initial_document_mcp_paths": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "workflow_options": {"type": "object"}
+        },
+        "required": ["user_query"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {"type": "string"},
+          "status": {"type": "string"},
+          "summary_report_mcp_path": {"type": "string"}
+        }
+      }
+    },
+    {
+      "name": "get_workflow_status",
+      "description": "Retrieves the current status and progress of a given workflow ID.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {"type": "string"}
+        },
+        "required": ["workflow_id"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "workflow_id": {"type": "string"},
+          "status": {"type": "string"},
+          "progress_percentage": {"type": "number"},
+          "details": {"type": "object"}
+        }
+      }
+    }
+  ],
+  "dependencies": ["mcp_find_agent_for_task_tool", "mcp_graph_db_tool"],
+  "tags": ["legal", "research", "orchestration", "pydantic-graph"]
+}

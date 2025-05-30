@@ -1,0 +1,33 @@
+{
+  "agent_id": "legal_research_coordinator_001",
+  "agent_name": "LegalResearchCoordinator",
+  "agent_type": "Coordinator",
+  "description": "Coordinates legal research tasks, including web searches, WCAT scraping, and policy matching.",
+  "a2a_url_template": "http://{host}:{port}",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "name": "conduct_comprehensive_research",
+      "description": "Conducts comprehensive legal research based on keywords, case context, and specified sources.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "search_keywords": {"type": "array", "items": {"type": "string"}},
+          "case_context_summary": {"type": "string"},
+          "research_depth": {"type": "string", "enum": ["shallow", "moderate", "deep"]},
+          "sources_to_include": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["search_keywords", "case_context_summary"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "research_findings_summary_mcp_path": {"type": "string"},
+          "cited_sources_count": {"type": "integer"}
+        }
+      }
+    }
+  ],
+  "dependencies": ["mcp_web_search_tool", "mcp_wcat_scraping_tool", "mcp_vector_db_tool"],
+  "tags": ["legal", "research", "policy", "wcat"]
+}
