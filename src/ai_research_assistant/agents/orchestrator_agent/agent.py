@@ -1,209 +1,170 @@
-# File: src/savagelysubtle_airesearchagent/agents/chief_legal_orchestrator/agent.py
-
+# src/ai_research_assistant/agents/chief_legal_orchestrator/agent.py
 import logging
 import uuid
-from typing import Any, Dict, Optional, Type, List
+from typing import Any, Dict, List, Optional
 
-from pydantic_ai import Agent as PydanticAIAgent # For its internal decision making
 from pydantic_ai.tool import Tool as PydanticAITool
-from pydantic_ai.message import ModelMessage
-from pydantic_ai.agent import AgentRunResult
-
-from pydantic_graph import Graph as PydanticGraph
-# from pydantic_graph import GraphRun, GraphRunResult as PydanticGraphRunResult # For running the graph
-# from pydantic_graph.persistence import BaseStatePersistence # For graph state
 
 from savagelysubtle_airesearchagent.agents.base_pydantic_agent import BasePydanticAgent
-from savagelysubtle_airesearchagent.agents.chief_legal_orchestrator.config import ChiefLegalOrchestratorConfig
-# from savagelysubtle_airesearchagent.agents.chief_legal_orchestrator.task_graph import initialize_workflow_graph, BaseWorkflowState # Placeholder
-# from savagelysubtle_airesearchagent.core.mcp_client_utils import create_mcp_tools_for_agent # Placeholder for tool creation
-# from savagelysubtle_airesearchagent.a2a_services.a2a_client_utils import A2AClient # Placeholder
+from savagelysubtle_airesearchagent.agents.base_pydantic_agent_config import BasePydanticAgentConfig
+# from .task_graph import initialize_full_research_workflow_graph # Placeholder for pydantic-graph
+# from savagelysubtle_airesearchagent.core.mcp_client_utils import find_agent_for_task_on_mcp # If using MCP for discovery
+# from savagelysubtle_airesearchagent.a2a_services.a2a_client_utils import A2AClient # If making direct A2A calls from here
 
 logger = logging.getLogger(__name__)
 
-# Placeholder for where graph state persistence logic would be defined or imported
-# class MCPGraphStatePersistence(BaseStatePersistence):
-#     def __init__(self, mcp_client: Any, persistence_tool_id: str, run_id: str):
-#         self.mcp_client = mcp_client
-#         self.persistence_tool_id = persistence_tool_id
-#         self.run_id = run_id
-#         super().__init__()
-    # ... implement abstract methods using MCP calls ...
+class ChiefLegalOrchestratorConfig(BasePydanticAgentConfig):
+    agent_name: str = "ChiefLegalOrchestrator"
+    agent_id: str = "chief_legal_orchestrator_instance_001"
+    default_research_workflow_name: str = "FullResearchWorkflow"
+    task_graph_persistence_mcp_tool_id: Optional[str] = Field(default=None, description="MCP Tool ID for persisting task graph state (e.g., a Neo4j MCP tool).")
+    pydantic_ai_system_prompt: str = (
+        "You are the Chief Legal Orchestrator. Your role is to manage complex legal research workflows. "
+        "You will receive user requests, break them down into phases (Document Intake, Research, Query & Synthesis), "
+        "discover appropriate Coordinator agents for each phase using available tools, invoke their skills via A2A calls, "
+        "and manage the overall state of the workflow using a pydantic-graph. "
+        "Synthesize final reports from the outputs of coordinator agents."
+    )
 
 
 class ChiefLegalOrchestrator(BasePydanticAgent):
-    """
-    The ChiefLegalOrchestrator agent manages and executes legal research workflows
-    using pydantic-graph. It delegates tasks to Coordinator agents via A2A calls.
-    Its own Pydantic AI agent instance is used for LLM-driven decisions within the graph.
-    """
+    def __init__(self, config: Optional[ChiefLegalOrchestratorConfig] = None):
+        super().__init__(config=config or ChiefLegalOrchestratorConfig())
+        self.orchestrator_config: ChiefLegalOrchestratorConfig = self.config # type: ignore
+        # self.a2a_client = A2AClient() # Initialize if making direct A2A calls outside of graph nodes
 
-    def __init__(
-        self,
-        config: ChiefLegalOrchestratorConfig,
-        # mcp_client: Optional[MCPClient] = None, # Inherited from BasePydanticAgent
-        # a2a_client: Optional[A2AClient] = None, # Client for A2A communication
-        # workflow_definitions: Optional[Dict[str, PydanticGraph]] = None # Pre-defined graphs
-    ):
-        super().__init__(config=config) # Initializes self.pydantic_agent from Base
-        self.orchestrator_config: ChiefLegalOrchestratorConfig = config # Type hint for convenience
-
-        # self.a2a_client = a2a_client or A2AClient() # Initialize A2A client
-
-        # Initialize pydantic-graph instances.
-        # In a real scenario, these graph definitions would come from task_graph.py
-        # and might be dynamically selected.
-        # self.workflow_graphs: Dict[str, PydanticGraph] = workflow_definitions or {}
-        # if not self.workflow_graphs and self.orchestrator_config.default_research_workflow_name:
-        #     # Example: Load a default graph
-        #     # self.workflow_graphs[self.orchestrator_config.default_research_workflow_name] = initialize_workflow_graph(
-        #     #     self.pydantic_agent, # The orchestrator's own LLM agent for decisions in graph nodes
-        #     #     self.mcp_client,
-        #     #     self.a2a_client
-        #     # )
-        #     pass # Actual graph initialization would be more complex
-
-        logger.info(f"ChiefLegalOrchestrator {self.agent_name} initialized.")
+        # Placeholder for pydantic-graph initialization
+        # self.workflow_graph = initialize_full_research_workflow_graph(
+        #     llm_agent=self.pydantic_agent, # Orchestrator's own LLM for graph decisions
+        #     mcp_client=self.mcp_client,
+        #     a2a_client=self.a2a_client
+        # )
+        logger.info(f"ChiefLegalOrchestrator '{self.agent_name}' initialized.")
         logger.warning("Pydantic-graph integration is conceptual in this placeholder.")
-        logger.warning("Actual graph definition and execution logic needs to be implemented in task_graph.py and linked here.")
-
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
-        """
-        Defines the tools available to the ChiefLegalOrchestrator's internal Pydantic AI agent.
-        These tools are used for decisions within the pydantic-graph, like discovering other agents.
-        """
         base_tools = super()._get_initial_tools()
-        orchestrator_tools = [] # Initialize empty list
+        orchestrator_specific_tools: List[PydanticAITool] = []
 
-        # Example: Adding a tool to find other agents via MCP
-        # This tool would be implemented in common_agent_utils.py or mcp_integration/shared_tools
-        # and use self.mcp_client
-        #
-        # from savagelysubtle_airesearchagent.agents.common_agent_utils import make_find_agent_tool
-        # find_agent_tool = make_find_agent_tool(self.mcp_client) # self.mcp_client from BasePydanticAgent
-        # orchestrator_tools.append(find_agent_tool)
-
-        # Placeholder tool for making A2A calls (would be more sophisticated)
+        # Example: Tool to find other agents (if not directly using mcp_client_utils)
+        # This tool would be used by the orchestrator's internal LLM agent for graph decisions.
         # from pydantic_ai.tool import tool as pydantic_ai_tool_decorator
         # @pydantic_ai_tool_decorator
-        # async def invoke_coordinator_skill_tool(a2a_client_instance: A2AClient, target_agent_url: str, skill_name: str, skill_params: Dict[str, Any]) -> Dict[str, Any]:
-        #     """Invokes a skill on a coordinator agent via A2A."""
-        #     # This is a simplified representation. The actual A2A client might be part of deps.
-        #     # return await a2a_client_instance.call_skill(target_agent_url, skill_name, skill_params)
-        #     logger.warning(f"A2A Call (mock): to {target_agent_url} for skill {skill_name} with {skill_params}")
-        #     return {"status": "success", "result": "mocked_result_from_" + skill_name}
-        # orchestrator_tools.append(invoke_coordinator_skill_tool)
+        # async def find_coordinator_agent(task_description: str) -> Dict[str, Any]:
+        #     """Finds a coordinator agent suitable for the given task description."""
+        #     # This would internally use self.mcp_client or find_agent_for_task_on_mcp
+        #     logger.info(f"Orchestrator tool: finding agent for task: {task_description}")
+        #     # agent_card = await find_agent_for_task_on_mcp(task_description)
+        #     # return agent_card if agent_card else {"error": "No agent found"}
+        #     return {"agent_id": "mock_coordinator_id", "url": "http://mock.coordinator", "description": f"Mock for {task_description}"}
+        # orchestrator_specific_tools.append(find_coordinator_agent)
 
+        logger.info(f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools.")
+        return base_tools + orchestrator_specific_tools
 
-        logger.info(f"ChiefLegalOrchestrator {self.agent_name} initialized with {len(orchestrator_tools)} tools.")
-        return base_tools + orchestrator_tools
-
-    async def handle_incoming_request(
+    async def handle_full_research_workflow(
         self,
         user_query: str,
-        initial_documents: Optional[List[Dict[str, Any]]] = None, # e.g., {"path": "/mcp/docs/doc1.pdf", "type": "pdf"}
-        workflow_name: Optional[str] = None,
-        existing_workflow_id: Optional[str] = None,
-        # initial_graph_state: Optional[BaseWorkflowState] = None # If resuming
+        initial_document_mcp_paths: Optional[List[str]] = None,
+        workflow_options: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Main entry point for the orchestrator to handle a user request.
-        It initializes and runs a pydantic-graph workflow.
+        Initiates and manages a full legal research workflow.
+        This method will set up and run the pydantic-graph.
         """
-        logger.info(f"Orchestrator handling request: {user_query[:100]}")
+        logger.info(f"Orchestrator: Starting full research workflow for query: '{user_query[:100]}...'")
+        workflow_id = str(uuid.uuid4())
 
-        # 1. Determine workflow and initial state (potentially using self.pydantic_agent)
-        # For now, we'll assume a default workflow.
-        selected_workflow_name = workflow_name or self.orchestrator_config.default_research_workflow_name
+        # Placeholder for pydantic-graph execution
+        # initial_state = {
+        #     "workflow_id": workflow_id,
+        #     "user_query": user_query,
+        #     "initial_document_mcp_paths": initial_document_mcp_paths or [],
+        #     "workflow_options": workflow_options or {},
+        #     "status": "pending_intake",
+        #     "document_processing_summary": None,
+        #     "research_findings_summary": None,
+        #     "final_report_mcp_path": None,
+        # }
+        # graph_run_result = await self.workflow_graph.run(state=initial_state)
+        # final_output = graph_run_result.output
+        # final_state = graph_run_result.state
 
-        # graph_to_run = self.workflow_graphs.get(selected_workflow_name)
-        # if not graph_to_run:
-        #     logger.error(f"Workflow '{selected_workflow_name}' not found.")
-        #     return {"success": False, "error": f"Workflow '{selected_workflow_name}' not found."}
+        # Mocked response
+        mock_final_report_path = f"/mcp/reports/{workflow_id}/final_report.md"
+        logger.warning("Pydantic-graph execution is mocked for 'handle_full_research_workflow'.")
 
-        run_id = existing_workflow_id or str(uuid.uuid4())
+        # Simulate phases based on WORKFLOWS.MD
+        # 1. Document Intake (Conceptual call to DocumentProcessingCoordinator)
+        doc_processing_summary = {"case_id": workflow_id, "processed_documents_count": len(initial_document_mcp_paths or []), "overall_status": "Completed"}
 
-        # current_state: BaseWorkflowState
-        # if initial_graph_state:
-        #     current_state = initial_graph_state
-        # else:
-            # current_state = BaseWorkflowState(
-            #     workflow_id=run_id,
-            #     user_query=user_query,
-            #     initial_documents=initial_documents or [],
-            #     # ... other initial state fields
-            # )
+        # 2. Research Phase (Conceptual call to LegalResearchCoordinator)
+        research_findings_summary = {"research_query_summary": user_query, "findings_count": 5, "key_insights": ["Mock insight 1"]}
 
-        # persistence_layer: Optional[BaseStatePersistence] = None
-        # if self.orchestrator_config.task_graph_persistence_mcp_tool_id:
-        #     persistence_layer = MCPGraphStatePersistence(
-        #         mcp_client=self.mcp_client, # Assuming mcp_client is available
-        #         persistence_tool_id=self.orchestrator_config.task_graph_persistence_mcp_tool_id,
-        #         run_id=run_id
-        #     )
-        # else:
-        #     from pydantic_graph.persistence.in_mem import FullStatePersistence # Default if no MCP persistence
-        #     persistence_layer = FullStatePersistence(deep_copy=True)
+        # 3. Query & Synthesis (Conceptual call to DataQueryCoordinator)
+        # report_artifact_mcp_path = mock_final_report_path
 
+        # 4. Finalize (Conceptual reading of report)
+        # final_report_content = f"Mock report for query: {user_query}"
 
-        # 2. Run the pydantic-graph
-        # This is a highly simplified representation of running a pydantic-graph.
-        # The actual graph execution involves iterating through nodes, handling state, etc.
-        logger.warning("Pydantic-graph execution is currently a placeholder.")
-        # try:
-        #     # graph_run_result: PydanticGraphRunResult = await graph_to_run.run(
-        #     #     start_node=graph_to_run.get_start_node_instance(current_state), # Method to get initial node
-        #     #     state=current_state,
-        #     #     deps={ # Dependencies for graph nodes (e.g., orchestrator's LLM agent, A2A client)
-        #     #         "llm_agent": self.pydantic_agent,
-        #     #         "mcp_client": self.mcp_client,
-        #     #         "a2a_client": self.a2a_client,
-        #     #         "orchestrator_config": self.orchestrator_config
-        #     #     },
-        #     #     persistence=persistence_layer
-        #     # )
-        #     # final_output = graph_run_result.output
-        #     # final_state = graph_run_result.state
-        #     # history = await persistence_layer.load_all() if persistence_layer else []
-
-        #     # Simulate graph execution
-        mock_final_output = f"Processed: {user_query}"
-        mock_final_state = {"status": "completed", "summary": mock_final_output}
-        mock_history = [{"node": "StartNode", "status": "success"}, {"node": "EndNode", "status": "success", "output": mock_final_output}]
 
         return {
-            "success": True,
-            "workflow_id": run_id,
-            "output": mock_final_output,
-            "final_state": mock_final_state,
-            # "history_summary": [str(h.node if hasattr(h, 'node') else h.result) for h in history]
-            "history_summary": mock_history
+            "workflow_id": workflow_id,
+            "status": "completed_mock", # graph_run_result.state.get("status", "unknown")
+            "summary_report_mcp_path": mock_final_report_path, # final_state.get("final_report_mcp_path")
+            # "final_report_content": final_report_content # If returning content directly
         }
-        # except Exception as e:
-        #     logger.error(f"Workflow execution failed for {run_id}: {e}", exc_info=True)
-        #     return {"success": False, "workflow_id": run_id, "error": str(e)}
 
-
-    async def get_workflow_status_skill(self, workflow_id: str) -> Dict[str, Any]:
+    async def get_workflow_status(self, workflow_id: str) -> Dict[str, Any]:
         """
-        A skill to get the status of an ongoing or completed workflow.
-        This would likely query the persistence layer for the graph state.
+        Retrieves the current status and progress of a given workflow ID.
         """
-        logger.info(f"Fetching status for workflow_id: {workflow_id}")
-        # persistence_layer: Optional[BaseStatePersistence] = None
-        # if self.orchestrator_config.task_graph_persistence_mcp_tool_id:
-        #     persistence_layer = MCPGraphStatePersistence(
-        #         mcp_client=self.mcp_client,
-        #         persistence_tool_id=self.orchestrator_config.task_graph_persistence_mcp_tool_id,
-        #         run_id=workflow_id
-        #     )
+        logger.info(f"Orchestrator: Getting status for workflow ID: {workflow_id}")
+        # Placeholder: In a real system, this would query the pydantic-graph persistence layer.
+        # state = await self.workflow_graph.persistence.load_state(workflow_id)
+        mock_state = {
+            "workflow_id": workflow_id,
+            "status": "in_progress_mock",
+            "current_phase": "ResearchPhase",
+            "progress_percentage": 66,
+            "details": {"message": "Currently conducting web searches and WCAT scraping."}
+        }
+        logger.warning("Pydantic-graph status retrieval is mocked for 'get_workflow_status'.")
+        return mock_state
 
-        # if persistence_layer:
-        #     # last_snapshot = await persistence_layer.load_last_snapshot() # Fictional method
-        #     # if last_snapshot:
-        #     #     return {"workflow_id": workflow_id, "status": "found", "current_node_id": last_snapshot.node.get_node_id(), "state": last_snapshot.state.dict()}
-        #     pass # Actual implementation needed
+    async def handle_user_request(self, user_prompt: str, ag_ui_tools: Optional[List[Dict[str,Any]]] = None) -> Dict[str, Any]:
+        """
+        Handles a generic user request, potentially for interactive chat or simpler tasks.
+        This might involve a simpler pydantic-graph or direct LLM interaction.
+        """
+        logger.info(f"Orchestrator: Handling user request (chat/simple): '{user_prompt[:100]}...'")
 
-        # Placeholder
-        return {"workflow_id": workflow_id, "status": "unknown", "message": "Graph state persistence not fully implemented."}
+        # Use the orchestrator's Pydantic AI agent for a direct response or simple task.
+        # This is where the `interactive chat with orchestrator` workflow would primarily hit.
+        # If the orchestrator decides to delegate, it would use its tools (e.g., find_agent_for_task)
+        # and then conceptually make an A2A call (which might be abstracted by a graph node).
+
+        # For this example, let's assume it tries to answer directly or find a coordinator.
+        # The `pydantic_ai_system_prompt` guides it to use tools for delegation.
+
+        # The `deps` for the run method would include instances of clients if tools need them.
+        # For example, if `find_coordinator_agent` tool needs `self.mcp_client`.
+        # This depends on how tools are defined and if they expect dependencies via `deps`.
+        # For simplicity, assuming tools can access `self.mcp_client` if they are methods of this class
+        # or if `self.pydantic_agent` was initialized with `deps_type` and `deps`.
+
+        # run_result: AgentRunResult = await self.pydantic_agent.run(prompt=user_prompt)
+        # For now, a mocked response.
+        mock_response_content = f"Orchestrator received: '{user_prompt}'. This would be an LLM-generated response, potentially after calling coordinator agents if needed."
+        if "research" in user_prompt.lower():
+            mock_response_content += "\n(Decided to delegate to LegalResearchCoordinator - mock call)"
+        elif "document" in user_prompt.lower():
+            mock_response_content += "\n(Decided to delegate to DocumentProcessingCoordinator - mock call)"
+
+        # The response should be structured as a TaskResult for the A2A client
+        from savagelysubtle_airesearchagent.core.models import TaskResult, Part
+        task_result = TaskResult(
+            status="completed",
+            parts=[Part(content=mock_response_content, type="text/plain")]
+        )
+        return task_result.model_dump(exclude_none=True)

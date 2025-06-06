@@ -10,7 +10,7 @@ import gradio as gr
 from browser_use.agent.service import Agent
 from gradio.components import Component
 
-from src.ai_research_assistant.agent.deep_research.deep_research_agent import (
+from ai_research_assistant.agent.deep_research.deep_research_agent import (
     DeepResearchAgent,
 )
 from src.ai_research_assistant.agent.legal_research.legal_case_agent import (
