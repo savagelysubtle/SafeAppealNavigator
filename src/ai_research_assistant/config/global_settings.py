@@ -1,15 +1,15 @@
 # config/global_settings.py
 
-import os
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load .env file
 load_dotenv()
 
+
 class GlobalSettings(BaseSettings):
     # LLM API Keys
-    OPENAI_API_KEY: str = "sk-..." # Default or load from env
+    OPENAI_API_KEY: str = "sk-..."  # Default or load from env
     ANTHROPIC_API_KEY: str | None = None
     GOOGLE_API_KEY: str | None = None
     # Add other LLM keys as needed
@@ -17,12 +17,16 @@ class GlobalSettings(BaseSettings):
     # Service URLs & Ports
     MCP_SERVER_HOST: str = "0.0.0.0"
     MCP_SERVER_PORT: int = 10000
-    MCP_SERVER_URL: str = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}" # Constructed
+    MCP_SERVER_URL: str = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}"  # Constructed
 
     RUST_FILESYSTEM_MCP_COMMAND: str = "path/to/your/rust-mcp-filesystem-server"
-    RUST_FILESYSTEM_MCP_ARGS: str = "F:/WCBCLAIM F:/AgentWCB" # Example, adjust as needed
+    RUST_FILESYSTEM_MCP_ARGS: str = (
+        "F:/WCBCLAIM F:/AgentWCB"  # Example, adjust as needed
+    )
     # Note: It's generally better to configure the Rust MCP server's URL if it runs as a separate service
-    RUST_FILESYSTEM_MCP_URL: str | None = "http://localhost:10001" # Assuming it runs as a service
+    RUST_FILESYSTEM_MCP_URL: str | None = (
+        "http://localhost:10001"  # Assuming it runs as a service
+    )
 
     CHIEF_LEGAL_ORCHESTRATOR_A2A_HOST: str = "0.0.0.0"
     CHIEF_LEGAL_ORCHESTRATOR_A2A_PORT: int = 10100
@@ -38,7 +42,9 @@ class GlobalSettings(BaseSettings):
 
     DATA_QUERY_COORDINATOR_A2A_HOST: str = "0.0.0.0"
     DATA_QUERY_COORDINATOR_A2A_PORT: int = 10103
-    DATA_QUERY_COORDINATOR_A2A_URL: str = f"http://{DATA_QUERY_COORDINATOR_A2A_HOST}:{DATA_QUERY_COORDINATOR_A2A_PORT}"
+    DATA_QUERY_COORDINATOR_A2A_URL: str = (
+        f"http://{DATA_QUERY_COORDINATOR_A2A_HOST}:{DATA_QUERY_COORDINATOR_A2A_PORT}"
+    )
 
     AG_UI_BACKEND_HOST: str = "0.0.0.0"
     AG_UI_BACKEND_PORT: int = 10200
@@ -56,6 +62,9 @@ class GlobalSettings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Pydantic Settings configuration
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
+
 
 settings = GlobalSettings()
