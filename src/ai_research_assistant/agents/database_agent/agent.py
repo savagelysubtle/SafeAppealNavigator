@@ -12,9 +12,10 @@ from ai_research_assistant.core.models import (
     QueryAndSynthesizeReportInput,
     SynthesizedReportOutput,
 )
+from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
+from ai_research_assistant.config.global_settings import settings
 
-# from savagelysubtle_airesearchagent.mcp_integration.shared_tools.db_tools import QuerySqlDatabaseTool, QueryVectorDatabaseTool
-# from savagelysubtle_airesearchagent.mcp_integration.shared_tools.fs_tools import WriteMcpFileTool, ReadMcpFileTool
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +39,17 @@ class DataQueryCoordinator(BasePydanticAgent):
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
         base_tools = super()._get_initial_tools()
-        # coordinator_tools = [
-        #     QuerySqlDatabaseTool(),
-        #     QueryVectorDatabaseTool(),
-        #     ReadMcpFileTool(), # To read summaries
-        #     WriteMcpFileTool() # To write the final report
-        # ] # Example tools
-        coordinator_tools: List[PydanticAITool] = []  # Placeholder
-        logger.warning(
-            "DataQueryCoordinator tools are placeholders. Implement actual MCP tools."
-        )
-        return base_tools + coordinator_tools
+        coordinator_tools: List[PydanticAITool] = []
+        # ...add any in-house tools here...
+
+        try:
+            mcp_tools = asyncio.run(fetch_and_wrap_mcp_tools(settings.MCP_SERVER_URL))
+        except Exception as e:
+            logger.error(f"Failed to fetch MCP tools: {e}")
+            mcp_tools = []
+
+        logger.warning("DataQueryCoordinator tools are placeholders. Implement actual MCP tools.")
+        return base_tools + coordinator_tools + mcp_tools
 
     async def query_and_synthesize_report(
         self,

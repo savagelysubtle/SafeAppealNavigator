@@ -7,9 +7,10 @@ from pydantic_ai.tool import Tool as PydanticAITool
 
 from savagelysubtle_airesearchagent.agents.base_pydantic_agent import BasePydanticAgent
 from savagelysubtle_airesearchagent.agents.base_pydantic_agent_config import BasePydanticAgentConfig
-# from .task_graph import initialize_full_research_workflow_graph # Placeholder for pydantic-graph
-# from savagelysubtle_airesearchagent.core.mcp_client_utils import find_agent_for_task_on_mcp # If using MCP for discovery
-# from savagelysubtle_airesearchagent.a2a_services.a2a_client_utils import A2AClient # If making direct A2A calls from here
+from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
+from ai_research_assistant.config.global_settings import settings
+
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +46,17 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
     def _get_initial_tools(self) -> List[PydanticAITool]:
         base_tools = super()._get_initial_tools()
         orchestrator_specific_tools: List[PydanticAITool] = []
+        # ...add any in-house tools here...
 
-        # Example: Tool to find other agents (if not directly using mcp_client_utils)
-        # This tool would be used by the orchestrator's internal LLM agent for graph decisions.
-        # from pydantic_ai.tool import tool as pydantic_ai_tool_decorator
-        # @pydantic_ai_tool_decorator
-        # async def find_coordinator_agent(task_description: str) -> Dict[str, Any]:
-        #     """Finds a coordinator agent suitable for the given task description."""
-        #     # This would internally use self.mcp_client or find_agent_for_task_on_mcp
-        #     logger.info(f"Orchestrator tool: finding agent for task: {task_description}")
-        #     # agent_card = await find_agent_for_task_on_mcp(task_description)
-        #     # return agent_card if agent_card else {"error": "No agent found"}
-        #     return {"agent_id": "mock_coordinator_id", "url": "http://mock.coordinator", "description": f"Mock for {task_description}"}
-        # orchestrator_specific_tools.append(find_coordinator_agent)
+        # Fetch MCP tools synchronously for agent init (since __init__ is not async)
+        try:
+            mcp_tools = asyncio.run(fetch_and_wrap_mcp_tools(settings.MCP_SERVER_URL))
+        except Exception as e:
+            logger.error(f"Failed to fetch MCP tools: {e}")
+            mcp_tools = []
 
-        logger.info(f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools.")
-        return base_tools + orchestrator_specific_tools
+        logger.info(f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools and {len(mcp_tools)} MCP tools.")
+        return base_tools + orchestrator_specific_tools + mcp_tools
 
     async def handle_full_research_workflow(
         self,

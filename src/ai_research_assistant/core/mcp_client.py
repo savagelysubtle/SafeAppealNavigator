@@ -7,7 +7,9 @@ Provides utilities for setting up MCP clients and creating tool parameter models
 import logging
 from typing import Any, Dict, Optional, Type
 
+import httpx
 from pydantic import BaseModel, create_model
+from pydantic_ai.tool import Tool as PydanticAITool
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,48 @@ def create_tool_param_model(tool) -> Type[BaseModel]:
         logger.error(f"Error creating tool param model for {tool.name}: {e}")
         # Return minimal model as fallback
         return create_model(f"{tool.name.replace('-', '_').title()}Params")
+
+
+async def fetch_and_wrap_mcp_tools(mcp_server_url: str) -> list:
+    """
+    Fetch tool definitions from the MCP server and wrap them as PydanticAITool instances.
+    """
+    tool_list_endpoint = (
+        f"{mcp_server_url}/mcp_tool/list_all_tools"  # Adjust endpoint as needed
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(tool_list_endpoint)
+            response.raise_for_status()
+            tool_defs = response.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch MCP tools: {e}")
+        return []
+
+    wrapped_tools = []
+    for tool_def in tool_defs:
+        param_model = create_tool_param_model(tool_def)
+
+        async def tool_func(params, tool_def=tool_def):
+            # Make HTTP call to tool endpoint with params
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(tool_def["endpoint"], json=params.dict())
+                    resp.raise_for_status()
+                    return resp.json()
+            except Exception as e:
+                logger.error(f"Error calling MCP tool {tool_def['name']}: {e}")
+                return {"error": str(e)}
+
+        wrapped_tools.append(
+            PydanticAITool(
+                name=tool_def["name"],
+                description=tool_def.get("description", ""),
+                input_model=param_model,
+                func=tool_func,
+            )
+        )
+    return wrapped_tools
 
 
 class MCPClient:

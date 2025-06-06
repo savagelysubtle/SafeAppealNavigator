@@ -14,6 +14,11 @@ from savagelysubtle_airesearchagent.core.models import (
 # from savagelysubtle_airesearchagent.mcp_integration.shared_tools.web_tools import WebSearchTool, WCATScrapingTool # Example
 # from savagelysubtle_airesearchagent.mcp_integration.shared_tools.db_tools import QueryVectorDatabaseTool # Example
 
+from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
+from ai_research_assistant.config.global_settings import settings
+
+import asyncio
+
 logger = logging.getLogger(__name__)
 
 class LegalResearchCoordinatorConfig(BasePydanticAgentConfig):
@@ -36,10 +41,17 @@ class LegalResearchCoordinator(BasePydanticAgent):
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
         base_tools = super()._get_initial_tools()
-        # coordinator_tools = [WebSearchTool(), WCATScrapingTool(), QueryVectorDatabaseTool()] # Example tools
-        coordinator_tools: List[PydanticAITool] = [] # Placeholder
+        coordinator_tools: List[PydanticAITool] = []
+        # ...add any in-house tools here...
+
+        try:
+            mcp_tools = asyncio.run(fetch_and_wrap_mcp_tools(settings.MCP_SERVER_URL))
+        except Exception as e:
+            logger.error(f"Failed to fetch MCP tools: {e}")
+            mcp_tools = []
+
         logger.warning("LegalResearchCoordinator tools are placeholders. Implement actual MCP tools.")
-        return base_tools + coordinator_tools
+        return base_tools + coordinator_tools + mcp_tools
 
     async def conduct_comprehensive_research(
         self,
