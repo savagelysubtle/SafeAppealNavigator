@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Type
 
 import httpx
 from pydantic import BaseModel, create_model
-from pydantic_ai.tool import Tool as PydanticAITool
+from pydantic_ai.tools import Tool as PydanticAITool
 
 logger = logging.getLogger(__name__)
 
@@ -78,27 +78,41 @@ async def fetch_and_wrap_mcp_tools(mcp_server_url: str) -> list:
         logger.error(f"Failed to fetch MCP tools: {e}")
         return []
 
+    def create_tool_func_for_tool(p_model, endpoint, name):
+        async def tool_func(params: p_model) -> Dict[str, Any]:
+            """Dynamically created tool function"""
+            try:
+                async with httpx.AsyncClient() as client:
+                    # use model_dump() for pydantic v2
+                    resp = await client.post(endpoint, json=params.model_dump())
+                    resp.raise_for_status()
+                    return resp.json()
+            except Exception as e:
+                logger.error(f"Error calling MCP tool {name}: {e}")
+                return {"error": str(e)}
+
+        return tool_func
+
     wrapped_tools = []
     for tool_def in tool_defs:
         param_model = create_tool_param_model(tool_def)
 
-        async def tool_func(params, tool_def=tool_def):
-            # Make HTTP call to tool endpoint with params
-            try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.post(tool_def["endpoint"], json=params.dict())
-                    resp.raise_for_status()
-                    return resp.json()
-            except Exception as e:
-                logger.error(f"Error calling MCP tool {tool_def['name']}: {e}")
-                return {"error": str(e)}
+        tool_function = create_tool_func_for_tool(
+            param_model,
+            tool_def.get("endpoint", ""),
+            tool_def.get("name", "unknown_tool"),
+        )
+
+        tool_description = tool_def.get("description", "")
+        # The description is inferred from the function's docstring if not provided.
+        # Let's set it on the function to be explicit.
+        tool_function.__doc__ = tool_description
 
         wrapped_tools.append(
             PydanticAITool(
+                function=tool_function,
                 name=tool_def["name"],
-                description=tool_def.get("description", ""),
-                input_model=param_model,
-                func=tool_func,
+                description=tool_description,
             )
         )
     return wrapped_tools

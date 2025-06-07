@@ -4,9 +4,10 @@ import logging
 import uuid
 from typing import Any, List, Optional, Type
 
-from pydantic import Agent as PydanticAIAgent
-from pydantic import AgentRunResult, ModelMessage
-from pydantic import Tool as PydanticAITool
+from pydantic_ai import Agent as PydanticAIAgent
+from pydantic_ai import RunResult
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.tools import Tool as PydanticAITool
 
 # Assuming your project structure is something like:
 # src/
@@ -54,6 +55,7 @@ class BasePydanticAgent:
 
         self.llm_factory: UnifiedLLMFactory = get_llm_factory()
         self.llm = self._initialize_llm()
+        self.tools = self._get_initial_tools()
 
         # Initialize MCP Client - this might be more complex depending on mcp_client.py
         # For now, assuming it's instantiated simply or passed in.
@@ -62,16 +64,17 @@ class BasePydanticAgent:
         self.mcp_client = MCPClient()  # Placeholder initialization
 
         # Initialize the core Pydantic AI agent
-        # Tools will be collected and passed by derived classes or specific skill setups.
+        # The API for pydantic_ai.Agent is different from pydantic.Agent
         self.pydantic_agent = PydanticAIAgent(
-            model=self.llm,
-            instructions=self.config.pydantic_ai_instructions,
-            system_prompt=self.config.pydantic_ai_system_prompt,
-            tools=self._get_initial_tools(),  # Derived classes should override or extend this
-            retries=self.config.pydantic_ai_retries,
-            # deps_type can be set if there's a common dependency structure for tools
-            # For example, if all tools need the MCPClient:
-            # deps_type=MCPClient,
+            self.llm,
+            # 'instructions' might map to 'system_prompt' in pydantic_ai
+            system_prompt=(
+                self.config.pydantic_ai_instructions
+                or self.config.pydantic_ai_system_prompt
+                or ""
+            ),
+            tools=self.tools,
+            # retries is not a direct parameter, might be part of llm config
         )
 
         # self.state_manager = state_manager or AgentStateManager() # For skills to use
@@ -134,7 +137,7 @@ class BasePydanticAgent:
             Any
         ] = None,  # Dependencies for this specific skill run
         **kwargs,
-    ) -> AgentRunResult:
+    ) -> RunResult:
         """
         A generic way to run a skill using the encapsulated Pydantic AI agent.
         Specific agents (Coordinators) will have more descriptively named methods
@@ -148,41 +151,18 @@ class BasePydanticAgent:
                                This could be self.mcp_client if tools need it.
 
         Returns:
-            AgentRunResult from pydantic_ai.Agent.
+            RunResult from pydantic_ai.Agent.
         """
         logger.debug(
             f"Running skill for {self.agent_name} with prompt: {prompt[:100]}..."
         )
 
-        # If an output_type is provided for this specific skill,
-        # we might need to run with a temporarily reconfigured agent or handle it.
-        # For simplicity, PydanticAIAgent can take output_type directly in run if supported,
-        # or one might create a temporary agent instance if the base `self.pydantic_agent`
-        # has a conflicting default output_type.
-        # However, pydantic_ai.Agent.run does not take output_type directly.
-        # The output_type is part of the Agent's constructor.
-        # So, if a skill needs a *different* output_type than the agent's default,
-        # this approach needs refinement. Often, skills will be methods with Pydantic
-        # input/output types, and the A2A wrapper handles invoking them.
-        # The internal call to self.pydantic_agent.run() might use the agent's default output_type.
-
-        if output_type and output_type != self.pydantic_agent.output_type:
-            # This is a simplification. In reality, if a skill needs a *different*
-            # output_type than the agent's default, you might:
-            # 1. Have the agent's default output_type be a Union of all possible skill outputs.
-            # 2. Create a temporary, specialized PydanticAIAgent instance for this run.
-            # 3. Rely on the skill method itself being typed and FastA2A handling the output.
-            logger.warning(
-                f"Skill-specific output_type ({output_type}) differs from agent's default ({self.pydantic_agent.output_type}). This run will use the agent's default output handling unless the skill method is directly called by A2A."
-            )
-
-        # If tools need access to MCPClient, pass it as deps
-        current_deps = skill_dependencies
-        # Example: if self.pydantic_agent was initialized with deps_type=MCPClient
-        # current_deps = self.mcp_client
-
         return await self.pydantic_agent.run(
-            prompt=prompt, messages=message_history, deps=current_deps, **kwargs
+            prompt,
+            message_history=message_history,
+            output_type=output_type,
+            deps=skill_dependencies,
+            **kwargs,
         )
 
     async def health_check(self) -> dict:
@@ -220,5 +200,5 @@ class BasePydanticAgent:
             is not None,
             "pydantic_ai_system_prompt": self.config.pydantic_ai_system_prompt
             is not None,
-            "tools_count": len(self.pydantic_agent.tools or []),
+            "tools_count": len(self.tools or []),
         }

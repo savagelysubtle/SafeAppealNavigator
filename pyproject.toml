@@ -23,6 +23,7 @@ dependencies = [
     "opencv-python>=4.11.0.86",
     "pillow>=11.2.1",
     "pydantic>=2.10.6",
+    "pydantic-ai",
     "pypdf2>=3.0.1",
     "pyperclip==1.9.0",
     "pytesseract>=0.3.13",
@@ -38,8 +39,19 @@ requires-python = ">=3.13"
 version = "1.0.0"
 
     [project.optional-dependencies]
+    all = [
+        "ai-research-assistant[dev]",
+    ]
     dev = [
         "ty<=0.0.1a6",
+        "ruff",
+        "pytest",
+        "pytest-asyncio",
+        "pytest-mock",
+        "pytest-cov",
+        "pytest-timeout",
+        "pytest-mock",
+        "pytest-cov",
     ]
 
 [build-system]
