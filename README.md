@@ -16,3 +16,22 @@ The vision is to create a powerful AI assistant that can significantly augment l
 **Custom Browser Support:** You can use your own browser with our tool, eliminating the need to re-login to sites or deal with other authentication challenges. This feature also supports high-definition screen recording.
 
 **Persistent Browser Sessions:** You can choose to keep the browser window open between AI tasks, allowing you to see the complete history and state of AI interactions.
+
+## Documentation
+
+This project uses MkDocs to generate documentation. To build and view the documentation locally, follow these steps:
+
+1.  **Install MkDocs and the Material theme:**
+    ```bash
+    pip install mkdocs mkdocs-material
+    ```
+2.  **Start the development server:**
+    ```bash
+    mkdocs serve
+    ```
+    This will start a local server, usually at `http://127.0.0.1:8000/`.
+3.  **Build the static site (optional):**
+    ```bash
+    mkdocs build
+    ```
+    This will create a `site` directory with the static HTML files.

@@ -1,0 +1,12 @@
+site_name: AI Research Assistant
+site_url: http://localhost:8000 # Replace with actual URL if available
+theme:
+  name: material
+nav:
+  - Home: README.md
+  - Architecture: ARCHITECTURE.md
+  - AgentFlows: AgentFlow/AgentFlows.md
+  - Dev Kickoff: DEV_KICKOFF.md
+  - File Tree: FILE_TREE.md
+  - Memory Model: MEMORY_MODEL.md
+  - Workflows: WORKFLOWS.md
