@@ -1,24 +1,31 @@
 # src/ai_research_assistant/agents/chief_legal_orchestrator/agent.py
+import asyncio
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from pydantic_ai.tool import Tool as PydanticAITool
+from pydantic import Field
+from pydantic_ai.tools import Tool as PydanticAITool
 
-from savagelysubtle_airesearchagent.agents.base_pydantic_agent import BasePydanticAgent
-from savagelysubtle_airesearchagent.agents.base_pydantic_agent_config import BasePydanticAgentConfig
-from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
+from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
+from ai_research_assistant.agents.base_pydantic_agent_config import (
+    BasePydanticAgentConfig,
+)
 from ai_research_assistant.config.global_settings import settings
-
-import asyncio
+from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
+from ai_research_assistant.core.models import Part, TaskResult
 
 logger = logging.getLogger(__name__)
+
 
 class ChiefLegalOrchestratorConfig(BasePydanticAgentConfig):
     agent_name: str = "ChiefLegalOrchestrator"
     agent_id: str = "chief_legal_orchestrator_instance_001"
     default_research_workflow_name: str = "FullResearchWorkflow"
-    task_graph_persistence_mcp_tool_id: Optional[str] = Field(default=None, description="MCP Tool ID for persisting task graph state (e.g., a Neo4j MCP tool).")
+    task_graph_persistence_mcp_tool_id: Optional[str] = Field(
+        default=None,
+        description="MCP Tool ID for persisting task graph state (e.g., a Neo4j MCP tool).",
+    )
     pydantic_ai_system_prompt: str = (
         "You are the Chief Legal Orchestrator. Your role is to manage complex legal research workflows. "
         "You will receive user requests, break them down into phases (Document Intake, Research, Query & Synthesis), "
@@ -31,7 +38,7 @@ class ChiefLegalOrchestratorConfig(BasePydanticAgentConfig):
 class ChiefLegalOrchestrator(BasePydanticAgent):
     def __init__(self, config: Optional[ChiefLegalOrchestratorConfig] = None):
         super().__init__(config=config or ChiefLegalOrchestratorConfig())
-        self.orchestrator_config: ChiefLegalOrchestratorConfig = self.config # type: ignore
+        self.orchestrator_config: ChiefLegalOrchestratorConfig = self.config  # type: ignore
         # self.a2a_client = A2AClient() # Initialize if making direct A2A calls outside of graph nodes
 
         # Placeholder for pydantic-graph initialization
@@ -55,20 +62,24 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
             logger.error(f"Failed to fetch MCP tools: {e}")
             mcp_tools = []
 
-        logger.info(f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools and {len(mcp_tools)} MCP tools.")
+        logger.info(
+            f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools and {len(mcp_tools)} MCP tools."
+        )
         return base_tools + orchestrator_specific_tools + mcp_tools
 
     async def handle_full_research_workflow(
         self,
         user_query: str,
         initial_document_mcp_paths: Optional[List[str]] = None,
-        workflow_options: Optional[Dict[str, Any]] = None
+        workflow_options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Initiates and manages a full legal research workflow.
         This method will set up and run the pydantic-graph.
         """
-        logger.info(f"Orchestrator: Starting full research workflow for query: '{user_query[:100]}...'")
+        logger.info(
+            f"Orchestrator: Starting full research workflow for query: '{user_query[:100]}...'"
+        )
         workflow_id = str(uuid.uuid4())
 
         # Placeholder for pydantic-graph execution
@@ -88,14 +99,24 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
 
         # Mocked response
         mock_final_report_path = f"/mcp/reports/{workflow_id}/final_report.md"
-        logger.warning("Pydantic-graph execution is mocked for 'handle_full_research_workflow'.")
+        logger.warning(
+            "Pydantic-graph execution is mocked for 'handle_full_research_workflow'."
+        )
 
         # Simulate phases based on WORKFLOWS.MD
         # 1. Document Intake (Conceptual call to DocumentProcessingCoordinator)
-        doc_processing_summary = {"case_id": workflow_id, "processed_documents_count": len(initial_document_mcp_paths or []), "overall_status": "Completed"}
+        doc_processing_summary = {
+            "case_id": workflow_id,
+            "processed_documents_count": len(initial_document_mcp_paths or []),
+            "overall_status": "Completed",
+        }
 
         # 2. Research Phase (Conceptual call to LegalResearchCoordinator)
-        research_findings_summary = {"research_query_summary": user_query, "findings_count": 5, "key_insights": ["Mock insight 1"]}
+        research_findings_summary = {
+            "research_query_summary": user_query,
+            "findings_count": 5,
+            "key_insights": ["Mock insight 1"],
+        }
 
         # 3. Query & Synthesis (Conceptual call to DataQueryCoordinator)
         # report_artifact_mcp_path = mock_final_report_path
@@ -103,11 +124,10 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
         # 4. Finalize (Conceptual reading of report)
         # final_report_content = f"Mock report for query: {user_query}"
 
-
         return {
             "workflow_id": workflow_id,
-            "status": "completed_mock", # graph_run_result.state.get("status", "unknown")
-            "summary_report_mcp_path": mock_final_report_path, # final_state.get("final_report_mcp_path")
+            "status": "completed_mock",  # graph_run_result.state.get("status", "unknown")
+            "summary_report_mcp_path": mock_final_report_path,  # final_state.get("final_report_mcp_path")
             # "final_report_content": final_report_content # If returning content directly
         }
 
@@ -123,17 +143,25 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
             "status": "in_progress_mock",
             "current_phase": "ResearchPhase",
             "progress_percentage": 66,
-            "details": {"message": "Currently conducting web searches and WCAT scraping."}
+            "details": {
+                "message": "Currently conducting web searches and WCAT scraping."
+            },
         }
-        logger.warning("Pydantic-graph status retrieval is mocked for 'get_workflow_status'.")
+        logger.warning(
+            "Pydantic-graph status retrieval is mocked for 'get_workflow_status'."
+        )
         return mock_state
 
-    async def handle_user_request(self, user_prompt: str, ag_ui_tools: Optional[List[Dict[str,Any]]] = None) -> Dict[str, Any]:
+    async def handle_user_request(
+        self, user_prompt: str, ag_ui_tools: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
         """
         Handles a generic user request, potentially for interactive chat or simpler tasks.
         This might involve a simpler pydantic-graph or direct LLM interaction.
         """
-        logger.info(f"Orchestrator: Handling user request (chat/simple): '{user_prompt[:100]}...'")
+        logger.info(
+            f"Orchestrator: Handling user request (chat/simple): '{user_prompt[:100]}...'"
+        )
 
         # Use the orchestrator's Pydantic AI agent for a direct response or simple task.
         # This is where the `interactive chat with orchestrator` workflow would primarily hit.
@@ -153,14 +181,17 @@ class ChiefLegalOrchestrator(BasePydanticAgent):
         # For now, a mocked response.
         mock_response_content = f"Orchestrator received: '{user_prompt}'. This would be an LLM-generated response, potentially after calling coordinator agents if needed."
         if "research" in user_prompt.lower():
-            mock_response_content += "\n(Decided to delegate to LegalResearchCoordinator - mock call)"
+            mock_response_content += (
+                "\n(Decided to delegate to LegalResearchCoordinator - mock call)"
+            )
         elif "document" in user_prompt.lower():
-            mock_response_content += "\n(Decided to delegate to DocumentProcessingCoordinator - mock call)"
+            mock_response_content += (
+                "\n(Decided to delegate to DocumentProcessingCoordinator - mock call)"
+            )
 
         # The response should be structured as a TaskResult for the A2A client
-        from savagelysubtle_airesearchagent.core.models import TaskResult, Part
         task_result = TaskResult(
             status="completed",
-            parts=[Part(content=mock_response_content, type="text/plain")]
+            parts=[Part(content=mock_response_content, type="text/plain")],
         )
         return task_result.model_dump(exclude_none=True)

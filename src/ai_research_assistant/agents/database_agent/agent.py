@@ -1,21 +1,21 @@
 # src/ai_research_assistant/agents/data_query_coordinator/agent.py
+import asyncio
 import logging
+import uuid
 from typing import Any, Dict, List, Optional
 
-from pydantic import Tool as PydanticAITool
+from pydantic_ai.tools import Tool as PydanticAITool
 
 from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
 )
+from ai_research_assistant.config.global_settings import settings
+from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
 from ai_research_assistant.core.models import (
     QueryAndSynthesizeReportInput,
     SynthesizedReportOutput,
 )
-from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
-from ai_research_assistant.config.global_settings import settings
-
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,9 @@ class DataQueryCoordinator(BasePydanticAgent):
             logger.error(f"Failed to fetch MCP tools: {e}")
             mcp_tools = []
 
-        logger.warning("DataQueryCoordinator tools are placeholders. Implement actual MCP tools.")
+        logger.warning(
+            "DataQueryCoordinator tools are placeholders. Implement actual MCP tools."
+        )
         return base_tools + coordinator_tools + mcp_tools
 
     async def query_and_synthesize_report(
