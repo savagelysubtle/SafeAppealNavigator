@@ -1,5 +1,6 @@
 # File: src/ai_research_assistant/agents/base_pydantic_agent.py
 
+import asyncio
 import logging
 import uuid
 from typing import Any, List, Optional, Type
@@ -164,6 +165,47 @@ class BasePydanticAgent:
             deps=skill_dependencies,
             **kwargs,
         )
+
+    async def run_tool(self, tool_name: str, **kwargs: Any) -> Any:
+        """
+        Explicitly finds and runs a tool by name with the given arguments.
+
+        Args:
+            tool_name: The name of the tool to run.
+            **kwargs: The arguments to pass to the tool's function.
+
+        Returns:
+            The result of the tool's execution.
+
+        Raises:
+            ValueError: If the tool is not found.
+        """
+        logger.debug(f"Attempting to run tool '{tool_name}' for {self.agent_name}.")
+
+        tool_to_run = next((t for t in self.tools if t.name == tool_name), None)
+
+        if not tool_to_run:
+            logger.error(
+                f"Tool '{tool_name}' not found in {self.agent_name}'s tool list."
+            )
+            raise ValueError(f"Tool '{tool_name}' not found.")
+
+        # The `pydantic_ai.Tool`'s `run` method expects a `ToolCallPart` message and a context.
+        # We are bypassing the full LLM conversation flow here for direct execution,
+        # so we will call the underlying function directly.
+        # This assumes the tool's function can be called with the provided kwargs.
+
+        # The actual function to call is stored in `tool_to_run.function`
+        func = tool_to_run.function
+
+        # Pydantic AI tools can be async or sync. We need to handle both.
+        if asyncio.iscoroutinefunction(func):
+            return await func(**kwargs)
+        else:
+            # For sync functions, we can run them in a thread pool to avoid blocking
+            # the async event loop, though for many tools this might be overkill.
+            # For simplicity here, we call it directly.
+            return func(**kwargs)
 
     async def health_check(self) -> dict:
         """

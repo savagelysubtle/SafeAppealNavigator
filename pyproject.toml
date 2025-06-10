@@ -24,6 +24,7 @@ dependencies = [
     "pillow>=11.2.1",
     "pydantic>=2.10.6",
     "pydantic-ai",
+    "pypdf>=4.3.1",
     "pypdf2>=3.0.1",
     "pyperclip==1.9.0",
     "pytesseract>=0.3.13",
