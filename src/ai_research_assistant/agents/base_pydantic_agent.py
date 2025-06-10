@@ -1,17 +1,17 @@
-# File: src/savagelysubtle_airesearchagent/agents/base_pydantic_agent.py
+# File: src/ai_research_assistant/agents/base_pydantic_agent.py
 
 import logging
 import uuid
 from typing import Any, List, Optional, Type
 
-from pydantic_ai import Agent as PydanticAIAgent
-from pydantic_ai import RunResult
+from pydantic_ai.agent import Agent as PydanticAIAgent
+from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.tools import Tool as PydanticAITool
 
 # Assuming your project structure is something like:
 # src/
-#   savagelysubtle_airesearchagent/
+#   ai_research_assistant/
 #     agents/
 #       base_pydantic_agent.py
 #       base_pydantic_agent_config.py
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class BasePydanticAgent:
     """
-    Base class for all Pydantic AI-centric agents in the savagelysubtle-airesearchagent project.
+    Base class for all Pydantic AI-centric agents in the ai_research_assistant project.
     It encapsulates a pydantic_ai.Agent instance and provides common setup for
     LLM, MCP client, and basic configuration.
     """
@@ -137,7 +137,7 @@ class BasePydanticAgent:
             Any
         ] = None,  # Dependencies for this specific skill run
         **kwargs,
-    ) -> RunResult:
+    ) -> AgentRunResult:
         """
         A generic way to run a skill using the encapsulated Pydantic AI agent.
         Specific agents (Coordinators) will have more descriptively named methods
@@ -151,14 +151,14 @@ class BasePydanticAgent:
                                This could be self.mcp_client if tools need it.
 
         Returns:
-            RunResult from pydantic_ai.Agent.
+            AgentRunResult from pydantic_ai.Agent.
         """
         logger.debug(
             f"Running skill for {self.agent_name} with prompt: {prompt[:100]}..."
         )
 
         return await self.pydantic_agent.run(
-            prompt,
+            user_prompt=prompt,
             message_history=message_history,
             output_type=output_type,
             deps=skill_dependencies,
@@ -178,7 +178,7 @@ class BasePydanticAgent:
         }
         try:
             # A simple test prompt
-            await self.pydantic_agent.run("Hello, are you there?")
+            await self.pydantic_agent.run(user_prompt="Hello, are you there?")
             status["llm_status"] = "healthy"
             status["status"] = "healthy"
         except Exception as e:
