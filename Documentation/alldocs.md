@@ -175,7 +175,7 @@ savagelysubtle-airesearchagent/
 │       ├── agents/
 │       │   ├── __init__.py
 │       │   │
-│       │   ├── chief_legal_orchestrator/
+│       │   ├── orchestrator_agent/
 │       │   │   ├── __init__.py
 │       │   │   ├── agent.py        # Implements ChiefLegalOrchestrator (Pydantic AI + pydantic-graph)
 │       │   │   ├── task_graph.py   # pydantic-graph definitions
@@ -193,7 +193,7 @@ savagelysubtle-airesearchagent/
 │       │   │   │                   # Internally manages browser search, WCAT scraping, policy matching
 │       │   │   └── prompts.py
 │       │   │
-│       │   ├── data_query_coordinator/
+│       │   ├── database_agent/
 │       │   │   ├── __init__.py
 │       │   │   ├── agent.py        # Implements DataQueryCoordinator (Pydantic AI)
 │       │   │   │                   # Internally manages Chroma/SQLite queries and answer synthesis/report generation
