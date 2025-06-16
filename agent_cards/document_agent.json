@@ -1,7 +1,8 @@
 {
-  "agent_id": "document_processing_coordinator_001",
-  "agent_name": "DocumentProcessingCoordinator",
-  "agent_type": "Coordinator",
+  "agent_id": "document_agent_001",
+  "agent_name": "DocumentAgent",
+  "agent_type": "Worker",
+  "capability": "document_processing",
   "description": "Manages document ingestion, OCR, tagging, chunking, and embedding.",
   "a2a_url_template": "http://{host}:{port}",
   "version": "1.0.0",
@@ -17,27 +18,31 @@
             "items": {
               "type": "object",
               "properties": {
-                "mcp_path": {"type": "string"},
-                "document_type": {"type": "string"}
+                "mcp_path": { "type": "string" },
+                "document_type": { "type": "string" }
               },
               "required": ["mcp_path"]
             }
           },
-          "case_id": {"type": "string"},
-          "vector_collection_name": {"type": "string"}
+          "case_id": { "type": "string" },
+          "vector_collection_name": { "type": "string" }
         },
         "required": ["document_sources", "case_id"]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "processed_count": {"type": "integer"},
-          "failed_count": {"type": "integer"},
-          "artifact_summary_mcp_path": {"type": "string"}
+          "processed_count": { "type": "integer" },
+          "failed_count": { "type": "integer" },
+          "artifact_summary_mcp_path": { "type": "string" }
         }
       }
     }
   ],
-  "dependencies": ["mcp_filesystem_tool", "mcp_vector_db_tool", "mcp_sql_db_tool"],
+  "dependencies": [
+    "mcp_filesystem_tool",
+    "mcp_vector_db_tool",
+    "mcp_sql_db_tool"
+  ],
   "tags": ["legal", "document", "processing", "ocr", "embedding"]
 }

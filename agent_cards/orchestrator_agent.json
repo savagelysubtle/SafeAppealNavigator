@@ -1,8 +1,8 @@
 {
-  "agent_id": "chief_legal_orchestrator_001",
-  "agent_name": "ChiefLegalOrchestrator",
+  "agent_id": "orchestrator_agent_001",
+  "agent_name": "OrchestratorAgent",
   "agent_type": "Orchestrator",
-  "description": "Central coordinator for legal research workflows. Manages the overall Task Graph and delegates to Coordinator Agents.",
+  "description": "Central coordinator for legal research workflows. Manages the overall Task Graph and delegates to Worker Agents.",
   "a2a_url_template": "http://{host}:{port}",
   "version": "1.0.0",
   "skills": [
@@ -12,21 +12,21 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "user_query": {"type": "string"},
+          "user_query": { "type": "string" },
           "initial_document_mcp_paths": {
             "type": "array",
-            "items": {"type": "string"}
+            "items": { "type": "string" }
           },
-          "workflow_options": {"type": "object"}
+          "workflow_options": { "type": "object" }
         },
         "required": ["user_query"]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "workflow_id": {"type": "string"},
-          "status": {"type": "string"},
-          "summary_report_mcp_path": {"type": "string"}
+          "workflow_id": { "type": "string" },
+          "status": { "type": "string" },
+          "summary_report_mcp_path": { "type": "string" }
         }
       }
     },
@@ -36,17 +36,17 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "workflow_id": {"type": "string"}
+          "workflow_id": { "type": "string" }
         },
         "required": ["workflow_id"]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "workflow_id": {"type": "string"},
-          "status": {"type": "string"},
-          "progress_percentage": {"type": "number"},
-          "details": {"type": "object"}
+          "workflow_id": { "type": "string" },
+          "status": { "type": "string" },
+          "progress_percentage": { "type": "number" },
+          "details": { "type": "object" }
         }
       }
     }

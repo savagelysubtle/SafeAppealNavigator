@@ -1,4 +1,4 @@
-# src/ai_research_assistant/agents/document_processing_coordinator/agent.py
+# src/ai_research_assistant/agents/specialized_manager_agent/document_agent/agent.py
 import asyncio
 import io
 import json
@@ -17,9 +17,6 @@ from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
 )
-from ai_research_assistant.agents.document_agent.prompts import (
-    EXTRACT_METADATA_FROM_TEXT_PROMPT,
-)
 from ai_research_assistant.config.global_settings import settings
 from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
 from ai_research_assistant.core.models import (
@@ -29,14 +26,18 @@ from ai_research_assistant.core.models import (
     ProcessedDocumentInfo,
 )
 
+from .prompts import (
+    EXTRACT_METADATA_FROM_TEXT_PROMPT,
+)
+
 logger = logging.getLogger(__name__)
 
 
-class DocumentProcessingCoordinatorConfig(BasePydanticAgentConfig):
-    """Configuration for the DocumentProcessingCoordinator."""
+class DocumentAgentConfig(BasePydanticAgentConfig):
+    """Configuration for the DocumentAgent."""
 
-    agent_name: str = "DocumentProcessingCoordinator"
-    agent_id: str = Field(default_factory=lambda: f"doc_proc_coord_{uuid.uuid4()}")
+    agent_name: str = "DocumentAgent"
+    agent_id: str = Field(default_factory=lambda: f"doc_agent_{uuid.uuid4()}")
     default_artifact_storage_mcp_path: str = "/mcp/artifacts/"
     default_text_splitter_chunk_size: int = 1500
     default_text_splitter_chunk_overlap: int = 150
@@ -48,21 +49,21 @@ class DocumentProcessingCoordinatorConfig(BasePydanticAgentConfig):
     )
 
 
-class DocumentProcessingCoordinator(BasePydanticAgent):
+class DocumentAgent(BasePydanticAgent):
     """
     Coordinates the entire document intake pipeline: ingestion, OCR, metadata tagging,
     chunking, and embedding for legal documents.
     """
 
-    def __init__(self, config: Optional[DocumentProcessingCoordinatorConfig] = None):
-        super().__init__(config=config or DocumentProcessingCoordinatorConfig())
-        self.coordinator_config: DocumentProcessingCoordinatorConfig = self.config  # type: ignore
+    def __init__(self, config: Optional[DocumentAgentConfig] = None):
+        super().__init__(config=config or DocumentAgentConfig())
+        self.agent_config: DocumentAgentConfig = self.config  # type: ignore
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.coordinator_config.default_text_splitter_chunk_size,
-            chunk_overlap=self.coordinator_config.default_text_splitter_chunk_overlap,
+            chunk_size=self.agent_config.default_text_splitter_chunk_size,
+            chunk_overlap=self.agent_config.default_text_splitter_chunk_overlap,
             length_function=len,
         )
-        logger.info(f"DocumentProcessingCoordinator '{self.agent_name}' initialized.")
+        logger.info(f"DocumentAgent '{self.agent_name}' initialized.")
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
         base_tools = super()._get_initial_tools()
@@ -112,7 +113,7 @@ class DocumentProcessingCoordinator(BasePydanticAgent):
             prompt = EXTRACT_METADATA_FROM_TEXT_PROMPT.format(
                 document_text_snippet=text_snippet
             )
-            llm_result = await self.pydantic_agent.run(prompt=prompt)
+            llm_result = await self.pydantic_agent.run(user_prompt=prompt)
             return json.loads(llm_result.output)
         except (json.JSONDecodeError, TypeError) as e:
             logger.error(
@@ -125,7 +126,7 @@ class DocumentProcessingCoordinator(BasePydanticAgent):
 
     async def _store_artifact(self, content: str, case_id: str, filename: str) -> str:
         """Stores a text artifact using an MCP tool and returns its path."""
-        storage_path = self.coordinator_config.default_artifact_storage_mcp_path
+        storage_path = self.agent_config.default_artifact_storage_mcp_path
         mcp_path = f"{storage_path.rstrip('/')}/{case_id}/{filename}"
         await self.run_tool("write_mcp_file", mcp_path=mcp_path, content=content)
         return mcp_path

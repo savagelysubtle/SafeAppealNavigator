@@ -1,0 +1,32 @@
+{
+  "agent_id": "legal_manager_agent_001",
+  "agent_name": "LegalManagerAgent",
+  "agent_type": "Worker",
+  "capability": "legal_drafting",
+  "description": "Drafts high-quality legal memos and verifies citations based on research findings. This is a Phase-2 agent and currently a placeholder.",
+  "a2a_url_template": "http://{host}:{port}",
+  "version": "0.1.0",
+  "skills": [
+    {
+      "name": "draft_memo",
+      "description": "Takes research findings and drafts a legal memo.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "research_summary": {
+            "type": "object"
+          }
+        },
+        "required": ["research_summary"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "draft_memo_mcp_path": { "type": "string" }
+        }
+      }
+    }
+  ],
+  "dependencies": ["mcp_filesystem_tool"],
+  "tags": ["legal", "drafting", "memo", "citation"]
+}

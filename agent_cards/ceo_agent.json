@@ -1,0 +1,28 @@
+{
+  "agent_id": "ceo_agent_001",
+  "agent_name": "CEOAgent",
+  "agent_type": "Interface",
+  "description": "The main conversational interface with the user. It understands the user's high-level goals and delegates the work to the Orchestrator Agent.",
+  "a2a_url_template": "http://{host}:{port}",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "name": "handle_user_request",
+      "description": "Takes a raw user request, formulates a task for the orchestrator, and returns the final result.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "user_prompt": {
+            "type": "string"
+          }
+        },
+        "required": ["user_prompt"]
+      },
+      "output_schema": {
+        "type": "string"
+      }
+    }
+  ],
+  "dependencies": [],
+  "tags": ["interface", "ceo", "user_facing"]
+}

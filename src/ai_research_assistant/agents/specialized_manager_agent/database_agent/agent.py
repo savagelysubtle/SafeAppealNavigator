@@ -1,4 +1,4 @@
-# src/ai_research_assistant/agents/data_query_coordinator/agent.py
+# src/ai_research_assistant/agents/specialized_manager_agent/database_agent/agent.py
 import asyncio
 import logging
 import uuid
@@ -20,22 +20,22 @@ from ai_research_assistant.core.models import (
 logger = logging.getLogger(__name__)
 
 
-class DataQueryCoordinatorConfig(BasePydanticAgentConfig):
-    agent_name: str = "DataQueryCoordinator"
-    agent_id: str = "data_query_coordinator_instance_001"
+class DatabaseAgentConfig(BasePydanticAgentConfig):
+    agent_name: str = "DatabaseAgent"
+    agent_id: str = "database_agent_instance_001"
     default_report_storage_mcp_path: str = "/mcp/reports/"
     pydantic_ai_system_prompt: str = (
-        "You are a Data Query Coordinator. Your responsibility is to query various data stores (SQL, VectorDB, GraphDB) "
+        "You are a Database Agent. Your responsibility is to query various data stores (SQL, VectorDB, GraphDB) "
         "based on input criteria, synthesize the retrieved information, and generate a coherent report. "
         "You will use available tools to interact with databases and the filesystem for reading summaries and writing reports."
     )
 
 
-class DataQueryCoordinator(BasePydanticAgent):
-    def __init__(self, config: Optional[DataQueryCoordinatorConfig] = None):
-        super().__init__(config=config or DataQueryCoordinatorConfig())
-        self.coordinator_config: DataQueryCoordinatorConfig = self.config  # type: ignore
-        logger.info(f"DataQueryCoordinator '{self.agent_name}' initialized.")
+class DatabaseAgent(BasePydanticAgent):
+    def __init__(self, config: Optional[DatabaseAgentConfig] = None):
+        super().__init__(config=config or DatabaseAgentConfig())
+        self.agent_config: DatabaseAgentConfig = self.config  # type: ignore
+        logger.info(f"DatabaseAgent '{self.agent_name}' initialized.")
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
         base_tools = super()._get_initial_tools()
@@ -49,7 +49,7 @@ class DataQueryCoordinator(BasePydanticAgent):
             mcp_tools = []
 
         logger.warning(
-            "DataQueryCoordinator tools are placeholders. Implement actual MCP tools."
+            "DatabaseAgent tools are placeholders. Implement actual MCP tools."
         )
         return base_tools + coordinator_tools + mcp_tools
 
@@ -150,7 +150,7 @@ class DataQueryCoordinator(BasePydanticAgent):
 
         # 4. Store report artifact (using WriteMcpFileTool) - Conceptual
         report_filename = f"report_{uuid.uuid4()}.{input_data.report_format}"
-        report_artifact_mcp_path = f"{self.coordinator_config.default_report_storage_mcp_path.rstrip('/')}/{report_filename}"
+        report_artifact_mcp_path = f"{self.agent_config.default_report_storage_mcp_path.rstrip('/')}/{report_filename}"
         # await self.pydantic_agent.run_tool("write_mcp_file", mcp_path=report_artifact_mcp_path, content=mock_synthesized_report_content)
         logger.info(f"Mocked storing report to {report_artifact_mcp_path}")
 

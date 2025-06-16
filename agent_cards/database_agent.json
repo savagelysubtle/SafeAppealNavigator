@@ -1,7 +1,8 @@
 {
-  "agent_id": "data_query_coordinator_001",
-  "agent_name": "DataQueryCoordinator",
-  "agent_type": "Coordinator",
+  "agent_id": "database_agent_001",
+  "agent_name": "DatabaseAgent",
+  "agent_type": "Worker",
+  "capability": "database_operations",
   "description": "Coordinates data querying from various databases (SQL, VectorDB, GraphDB) and synthesizes reports.",
   "a2a_url_template": "http://{host}:{port}",
   "version": "1.0.0",
@@ -12,21 +13,29 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "natural_language_query": {"type": "string"},
-          "structured_filters": {"type": "object"},
-          "report_format": {"type": "string", "enum": ["summary", "detailed_json", "markdown"]}
+          "natural_language_query": { "type": "string" },
+          "structured_filters": { "type": "object" },
+          "report_format": {
+            "type": "string",
+            "enum": ["summary", "detailed_json", "markdown"]
+          }
         },
         "required": ["natural_language_query"]
       },
       "output_schema": {
         "type": "object",
         "properties": {
-          "report_artifact_mcp_path": {"type": "string"},
-          "queries_executed_count": {"type": "integer"}
+          "report_artifact_mcp_path": { "type": "string" },
+          "queries_executed_count": { "type": "integer" }
         }
       }
     }
   ],
-  "dependencies": ["mcp_sql_db_tool", "mcp_vector_db_tool", "mcp_graph_db_tool", "mcp_filesystem_tool"],
+  "dependencies": [
+    "mcp_sql_db_tool",
+    "mcp_vector_db_tool",
+    "mcp_graph_db_tool",
+    "mcp_filesystem_tool"
+  ],
   "tags": ["legal", "data", "query", "reporting", "synthesis"]
 }

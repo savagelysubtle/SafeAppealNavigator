@@ -1,71 +1,107 @@
-# src/ai_research_assistant/agents/chief_legal_orchestrator/agent.py
-import asyncio
+# src/ai_research_assistant/agents/orchestrator_agent/agent.py
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
-from pydantic import Field
+from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.tools import Tool as PydanticAITool
 
 from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
-from ai_research_assistant.agents.base_pydantic_agent_config import (
-    BasePydanticAgentConfig,
+from ai_research_assistant.agents.orchestrator_agent.config import (
+    OrchestratorAgentConfig,
 )
-from ai_research_assistant.config.global_settings import settings
-from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
 from ai_research_assistant.core.models import Part, TaskResult
 
 logger = logging.getLogger(__name__)
 
 
-class ChiefLegalOrchestratorConfig(BasePydanticAgentConfig):
-    agent_name: str = "ChiefLegalOrchestrator"
-    agent_id: str = "chief_legal_orchestrator_instance_001"
-    default_research_workflow_name: str = "FullResearchWorkflow"
-    task_graph_persistence_mcp_tool_id: Optional[str] = Field(
-        default=None,
-        description="MCP Tool ID for persisting task graph state (e.g., a Neo4j MCP tool).",
-    )
-    pydantic_ai_system_prompt: str = (
-        "You are the Chief Legal Orchestrator. Your role is to manage complex legal research workflows. "
-        "You will receive user requests, break them down into phases (Document Intake, Research, Query & Synthesis), "
-        "discover appropriate Coordinator agents for each phase using available tools, invoke their skills via A2A calls, "
-        "and manage the overall state of the workflow using a pydantic-graph. "
-        "Synthesize final reports from the outputs of coordinator agents."
-    )
+class OrchestratorAgent(BasePydanticAgent):
+    """
+    The Orchestrator Agent receives high-level tasks, breaks them down,
+    and delegates sub-tasks to specialized agents.
+    """
 
-
-class ChiefLegalOrchestrator(BasePydanticAgent):
-    def __init__(self, config: Optional[ChiefLegalOrchestratorConfig] = None):
-        super().__init__(config=config or ChiefLegalOrchestratorConfig())
-        self.orchestrator_config: ChiefLegalOrchestratorConfig = self.config  # type: ignore
-        # self.a2a_client = A2AClient() # Initialize if making direct A2A calls outside of graph nodes
-
-        # Placeholder for pydantic-graph initialization
-        # self.workflow_graph = initialize_full_research_workflow_graph(
-        #     llm_agent=self.pydantic_agent, # Orchestrator's own LLM for graph decisions
-        #     mcp_client=self.mcp_client,
-        #     a2a_client=self.a2a_client
-        # )
-        logger.info(f"ChiefLegalOrchestrator '{self.agent_name}' initialized.")
-        logger.warning("Pydantic-graph integration is conceptual in this placeholder.")
+    def __init__(self, config: OrchestratorAgentConfig | None = None):
+        # Ensure a default config is used if none is provided.
+        config = config or OrchestratorAgentConfig()
+        super().__init__(config=config)
+        self.config: OrchestratorAgentConfig = config
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
-        base_tools = super()._get_initial_tools()
-        orchestrator_specific_tools: List[PydanticAITool] = []
-        # ...add any in-house tools here...
+        """
+        Defines the tools available to the Orchestrator, which correspond to
+        the capabilities of the specialized agents it can command.
+        """
+        tools = [
+            PydanticAITool(
+                function=self.delegate_to_browser_agent,
+                name="delegate_to_browser_agent",
+                description="Delegate a web browsing task to the Browser Agent. Use this for searching the web, reading articles, or extracting information from websites.",
+            ),
+            PydanticAITool(
+                function=self.delegate_to_document_agent,
+                name="delegate_to_document_agent",
+                description="Delegate a document analysis task to the Document Agent. Use this for reading, summarizing, or extracting information from local documents (PDF, DOCX, etc.).",
+            ),
+        ]
+        return tools
 
-        # Fetch MCP tools synchronously for agent init (since __init__ is not async)
+    async def delegate_to_browser_agent(self, task_prompt: str) -> str:
+        """
+        A tool that instantiates and runs the BrowserAgent for a specific task.
+        """
+        logger.info(f"Orchestrator delegating to BrowserAgent: {task_prompt}")
+        # In a real scenario, you would instantiate the agent and run it.
+        # from ai_research_assistant.agents.specialized.browser_agent.agent import BrowserAgent
+        # from ai_research_assistant.agents.specialized.browser_agent.config import BrowserAgentConfig
+        # browser_agent = BrowserAgent(BrowserAgentConfig())
+        # result = await browser_agent.run_skill(prompt=task_prompt)
+        # return str(result.output)
+        return f"Placeholder: BrowserAgent completed task: {task_prompt}"
+
+    async def delegate_to_document_agent(self, task_prompt: str) -> str:
+        """
+        A tool that instantiates and runs the DocumentAgent for a specific task.
+        """
+        logger.info(f"Orchestrator delegating to DocumentAgent: {task_prompt}")
+        # Placeholder implementation
+        return f"Placeholder: DocumentAgent completed task: {task_prompt}"
+
+    async def orchestrate(self, user_prompt: str) -> str:
+        """
+        Main method for the orchestrator to process a user request.
+        It uses its LLM capabilities to decide which tool(s) to use.
+        """
+        logger.info(f"Orchestrator received task: {user_prompt}")
+        result: AgentRunResult = await self.run_skill(prompt=user_prompt)
+
+        # --- TEMPORARY DEBUGGING ---
+        # Log the type and attributes of the result to understand its structure
+        logger.info(f"DEBUG: Type of result is {type(result)}")
+        logger.info(f"DEBUG: Attributes of result: {dir(result)}")
         try:
-            mcp_tools = asyncio.run(fetch_and_wrap_mcp_tools(settings.MCP_SERVER_URL))
-        except Exception as e:
-            logger.error(f"Failed to fetch MCP tools: {e}")
-            mcp_tools = []
+            # Try to log the result as a dict if possible
+            logger.info(f"DEBUG: Result as dict: {vars(result)}")
+        except TypeError:
+            logger.info(
+                f"DEBUG: Could not convert result to dict. Raw result: {result}"
+            )
+        # --- END TEMPORARY DEBUGGING ---
 
-        logger.info(
-            f"{self.agent_name} initialized with {len(orchestrator_specific_tools)} specific tools and {len(mcp_tools)} MCP tools."
-        )
-        return base_tools + orchestrator_specific_tools + mcp_tools
+        # The logic below is likely incorrect and will be fixed after debugging.
+        # For now, we return a simple output.
+
+        # if hasattr(result, 'llm_response') and result.llm_response.message.tool_calls:
+        #     tool_call = result.llm_response.message.tool_calls[0]
+        #     tool_name = tool_call.function.name
+        #     tool_args_str = tool_call.function.arguments
+        #     tool_args = json.loads(tool_args_str)
+
+        #     logger.info(f"Orchestrator is calling tool: {tool_name} with args: {tool_args}")
+
+        #     return f"Orchestrator decided to use tool '{tool_name}' with arguments {tool_args_str}. The final result would be processed here."
+
+        return str(result.output)
 
     async def handle_full_research_workflow(
         self,
