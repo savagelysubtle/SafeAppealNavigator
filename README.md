@@ -461,3 +461,31 @@ This tool assists with legal research and document preparation. **Always consult
 **Created and maintained by [SavagelySubtle](https://github.com/savagelysubtle)**
 
 *Transforming AI research capabilities one case at a time* 🔬⚖️
+
+## AiResearchAgent IDE
+
+The AiResearchAgent is now integrated with a powerful, VSCode-based user interface, forked from the open-source `void-ide`. This provides a seamless environment for developing with AI agents directly in your editor.
+
+### Features
+
+- **Integrated AI Chat**: Interact with backend AI agents through a familiar chat interface.
+- **Inline Code Modifications**: Request and apply code changes directly in the editor using `Cmd+K` or a right-click context menu.
+- **Agent-Driven File System Operations**: Agents can read, write, and modify files in your workspace.
+- **Unified Workflow**: A single command starts the entire backend and frontend development environment.
+
+### Getting Started
+
+#### 1. Running the Application
+
+**For Users:**
+
+1.  Download the latest version for your operating system from the [**Releases**](https://github.com/savagelysubtle/AiResearchAgent/releases) page.
+2.  Unzip the application.
+3.  Launch the backend services (instructions to be provided).
+4.  Run the executable.
+
+**For Developers:**
+
+Please see the detailed [**IDE Integration Guide**](./Documentation/IDE_Integration_Guide.md) for instructions on how to set up the development environment.
+
+## Installation

@@ -1,16 +1,32 @@
 # src/ai_research_assistant/agents/orchestrator_agent/agent.py
+import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional
 
+from pydantic import TypeAdapter, ValidationError
 from pydantic_ai.agent import AgentRunResult
 from pydantic_ai.tools import Tool as PydanticAITool
 
-from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
+from ai_research_assistant.agents.base_pydantic_agent import (
+    BasePydanticAgent,
+    agent_skill,
+)
 from ai_research_assistant.agents.orchestrator_agent.config import (
     OrchestratorAgentConfig,
 )
-from ai_research_assistant.core.models import Part, TaskResult
+from ai_research_assistant.core.models import (
+    AnalyzeDocumentRequest,
+    ApprovePlanRequest,
+    ChatRequest,
+    CreateFileRequest,
+    InlineEditRequest,
+    Part,
+    StatusPart,
+    TaskResult,
+    UserPrompt,
+)
+from src.ai_research_assistant.ag_ui_backend.a2a_client import A2AClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +42,7 @@ class OrchestratorAgent(BasePydanticAgent):
         config = config or OrchestratorAgentConfig()
         super().__init__(config=config)
         self.config: OrchestratorAgentConfig = config
+        self.a2a_client = A2AClient()
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
         """
@@ -188,46 +205,146 @@ class OrchestratorAgent(BasePydanticAgent):
         )
         return mock_state
 
-    async def handle_user_request(
-        self, user_prompt: str, ag_ui_tools: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
-        """
-        Handles a generic user request, potentially for interactive chat or simpler tasks.
-        This might involve a simpler pydantic-graph or direct LLM interaction.
-        """
-        logger.info(
-            f"Orchestrator: Handling user request (chat/simple): '{user_prompt[:100]}...'"
+    async def _handle_chat(
+        self, prompt: str, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """Handles a standard chat request by calling the main generator."""
+        return await self.generate_response(prompt, history)
+
+    async def _handle_inline_edit(
+        self, request: InlineEditRequest, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """Handles an inline edit request."""
+        status_part = StatusPart(
+            message=f"Received inline edit request for {request.uri}"
+        ).model_dump()
+        return TaskResult(
+            parts=[
+                Part(type="application/vnd.agent-status.v1+json", content=status_part)
+            ]
         )
 
-        # Use the orchestrator's Pydantic AI agent for a direct response or simple task.
-        # This is where the `interactive chat with orchestrator` workflow would primarily hit.
-        # If the orchestrator decides to delegate, it would use its tools (e.g., find_agent_for_task)
-        # and then conceptually make an A2A call (which might be abstracted by a graph node).
+    async def _handle_create_file(
+        self, request: CreateFileRequest, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """Handles a create file request."""
+        status_part = StatusPart(
+            message=f"Received request to create file at {request.uri}"
+        ).model_dump()
+        return TaskResult(
+            parts=[
+                Part(type="application/vnd.agent-status.v1+json", content=status_part)
+            ]
+        )
 
-        # For this example, let's assume it tries to answer directly or find a coordinator.
-        # The `pydantic_ai_system_prompt` guides it to use tools for delegation.
+    async def _handle_analyze_document(
+        self, request: AnalyzeDocumentRequest, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """Handles an analyze document request."""
+        status_part = StatusPart(
+            message=f"Received request to analyze document {request.uri}"
+        ).model_dump()
+        return TaskResult(
+            parts=[
+                Part(type="application/vnd.agent-status.v1+json", content=status_part)
+            ]
+        )
 
-        # The `deps` for the run method would include instances of clients if tools need them.
-        # For example, if `find_coordinator_agent` tool needs `self.mcp_client`.
-        # This depends on how tools are defined and if they expect dependencies via `deps`.
-        # For simplicity, assuming tools can access `self.mcp_client` if they are methods of this class
-        # or if `self.pydantic_agent` was initialized with `deps_type` and `deps`.
+    async def _handle_approve_plan(
+        self, request: ApprovePlanRequest, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """Handles a plan approval request."""
+        status_part = StatusPart(
+            message=f"Received approval for plan {request.plan_id}"
+        ).model_dump()
+        return TaskResult(
+            parts=[
+                Part(type="application/vnd.agent-status.v1+json", content=status_part)
+            ]
+        )
 
-        # run_result: AgentRunResult = await self.pydantic_agent.run(prompt=user_prompt)
+    @agent_skill
+    async def handle_user_request(
+        self, user_prompt: str, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """
+        Handles a user request, which can be a simple string
+        or a JSON string representing a structured command from the Void IDE.
+        """
+        # Try to parse the user_prompt as a structured request
+        try:
+            prompt_data = json.loads(user_prompt)
+            # Use TypeAdapter to parse and validate the structured request against the Union
+            adapter = TypeAdapter(UserPrompt)
+            request_model = adapter.validate_python(prompt_data)
+
+            if isinstance(request_model, InlineEditRequest):
+                return await self._handle_inline_edit(request_model, history)
+            elif isinstance(request_model, CreateFileRequest):
+                return await self._handle_create_file(request_model, history)
+            elif isinstance(request_model, AnalyzeDocumentRequest):
+                return await self._handle_analyze_document(request_model, history)
+            elif isinstance(request_model, ApprovePlanRequest):
+                return await self._handle_approve_plan(request_model, history)
+            elif isinstance(request_model, ChatRequest):
+                # Even a structured request can be a chat message
+                return await self._handle_chat(request_model.prompt, history)
+
+        except (json.JSONDecodeError, ValidationError):
+            # If it's not a valid structured prompt, treat it as a simple chat message
+            return await self._handle_chat(user_prompt, history)
+
+        # Fallback in case something unexpected happens
+        return TaskResult(
+            status="error",
+            error_message="Could not process the request.",
+            parts=[Part(content="An unexpected error occurred.")],
+        )
+
+    async def generate_response(
+        self, prompt: str, history: List[Dict[str, Any]]
+    ) -> TaskResult:
+        """
+        Generates a response using the underlying Pydantic AI agent.
+        This is the core logic for handling chat-like interactions.
+        """
+        logger.info(f"Orchestrator generating response for: '{prompt[:100]}...'")
+
         # For now, a mocked response.
-        mock_response_content = f"Orchestrator received: '{user_prompt}'. This would be an LLM-generated response, potentially after calling coordinator agents if needed."
-        if "research" in user_prompt.lower():
+        # In the future, this will involve the Pydantic AI agent and tool calls.
+        mock_response_content = f"Orchestrator received: '{prompt}'. This would be an LLM-generated response."
+        if "research" in prompt.lower():
             mock_response_content += (
                 "\n(Decided to delegate to LegalResearchCoordinator - mock call)"
             )
-        elif "document" in user_prompt.lower():
+        elif "document" in prompt.lower():
             mock_response_content += (
                 "\n(Decided to delegate to DocumentProcessingCoordinator - mock call)"
             )
 
-        # The response should be structured as a TaskResult for the A2A client
-        task_result = TaskResult(
-            status="completed",
+        return TaskResult(
             parts=[Part(content=mock_response_content, type="text/plain")],
         )
-        return task_result.model_dump(exclude_none=True)
+
+    async def run_task(
+        self, task_description: str, context: Optional[Dict[str, Any]] = None
+    ) -> TaskResult:
+        """
+        Runs a specific, complex task by leveraging the full capabilities of the
+        pydantic-ai agent, including tools and graph-based execution.
+        """
+        logger.info(f"Orchestrator running task: '{task_description[:100]}...'")
+        # This is where the original complex logic for running a task would go.
+        # For now, returning a placeholder result.
+        return TaskResult(
+            parts=[Part(content=f"Task '{task_description}' is being processed.")]
+        )
+
+    async def _delegate_task_to_agent(
+        self, agent_id: str, task_description: str, context: Dict[str, Any]
+    ) -> TaskResult:
+        """Delegates a task to another agent via A2A communication."""
+        logger.info(f"Delegating task '{task_description}' to agent '{agent_id}'")
+        # This would involve using self.a2a_client to send the request
+        # For now, return a placeholder.
+        return TaskResult(parts=[Part(content=f"Task delegated to {agent_id}.")])

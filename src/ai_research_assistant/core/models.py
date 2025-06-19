@@ -1,14 +1,14 @@
 # src/ai_research_assistant/core/models.py
 import time
-import uuid
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
 
 # --- Message Envelope (as per ARCHITECTURE.MD) ---
 class Part(BaseModel):
-    content: Any  # Can be string or dict/list for JSON
+    content: Union[str, Dict[str, Any]] = ""
     type: str = Field(default="text/plain", description="MIME type of the content.")
 
 
@@ -20,6 +20,7 @@ class SkillInvocation(BaseModel):
 
 
 class TaskResult(BaseModel):
+    task_id: UUID = Field(default_factory=uuid4)
     status: str = Field(
         default="success",
         description="Status of the task (e.g., 'success', 'error', 'in_progress').",
@@ -36,14 +37,14 @@ class TaskResult(BaseModel):
 
 
 class MessageEnvelope(BaseModel):
-    message_id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
+    message_id: UUID = Field(
+        default_factory=uuid4,
         description="Unique identifier for the message.",
     )
-    conversation_id: Optional[str] = Field(
+    conversation_id: Optional[UUID] = Field(
         default=None, description="Identifier for the conversation thread."
     )
-    task_id: Optional[str] = Field(
+    task_id: Optional[UUID] = Field(
         default=None, description="Identifier for the task this message relates to."
     )
     timestamp: int = Field(
@@ -243,88 +244,119 @@ class SynthesizedReportOutput(BaseModel):
 
 
 # --- Void IDE Integration Models (Phase 1) ---
+# This section defines the standardized API contract for communication
+# between the AI backend and the Void IDE frontend.
 
 # --- Part Content Schemas (Backend -> Frontend) ---
 
 
-class AgentPlan(BaseModel):
+class PlanPart(BaseModel):
+    """A proposed plan of action from the agent."""
+
     plan: List[str]
     is_approved: bool = False
 
 
-class AgentStatus(BaseModel):
+class StatusPart(BaseModel):
+    """A real-time status update on the agent's current activity."""
+
     message: str
     step: Optional[int] = None
     total_steps: Optional[int] = None
 
 
-class CodeDiff(BaseModel):
-    uri: str
+class CodeDiffPart(BaseModel):
+    """Represents a code change using a diff format."""
+
+    uri: str  # Typically a file URI e.g., "file:///path/to/file.py"
     diff: str
 
 
-class FileContent(BaseModel):
-    uri: str
+class FileContentPart(BaseModel):
+    """Represents the full content for a file."""
+
+    uri: str  # Typically a file URI
     content: str
 
 
-class Notification(BaseModel):
+class NotificationPart(BaseModel):
+    """A toast notification to display to the user."""
+
     severity: Literal["info", "warn", "error"]
     message: str
 
 
-class IdeCommand(BaseModel):
+class IDECommandPart(BaseModel):
+    """Instructs the IDE to run a built-in or custom command."""
+
     commandId: str
     args: List[Any] = Field(default_factory=list)
 
 
-class LegalClauseAnalysis(BaseModel):
+class LegalClauseAnalysisPart(BaseModel):
+    """In-depth analysis of a specific legal clause."""
+
     uri: str
     clause_text: str
     analysis: str
     risk_level: Literal["low", "medium", "high"]
 
 
-class ContractSummary(BaseModel):
-    parties: List[str]
-    term_length: str
-    key_obligations: List[str]
+class ContractSummaryPart(BaseModel):
+    """A high-level summary of a legal document."""
 
-
-class ContractSummaryContainer(BaseModel):
     uri: str
-    summary: ContractSummary
+    summary: Dict[str, Any]  # e.g., {"parties": [...], "term_length": "..."}
 
 
 # --- SkillInvocation Parameter Schemas (Frontend -> Backend) ---
 
 
-class InlineEditPrompt(BaseModel):
-    type: Literal["inline_edit"] = "inline_edit"
+class InlineEditRequest(BaseModel):
+    """User wants to modify a selection of code in a file."""
+
+    type: Literal["inline_edit"]
     uri: str
     selection: str
     prompt: str
 
 
-class CreateFilePrompt(BaseModel):
-    type: Literal["create_file"] = "create_file"
+class CreateFileRequest(BaseModel):
+    """User or agent wants to create a new file with initial content."""
+
+    type: Literal["create_file"]
     uri: str
-    content: str
+    content: Optional[str] = None
 
 
-class AnalyzeDocumentPrompt(BaseModel):
-    type: Literal["analyze_document"] = "analyze_document"
+class AnalyzeDocumentRequest(BaseModel):
+    """User wants a legal analysis of the specified document."""
+
+    type: Literal["analyze_document"]
     uri: str
 
 
-class ApprovePlanPrompt(BaseModel):
-    type: Literal["approve_plan"] = "approve_plan"
-    plan_id: str
+class ApprovePlanRequest(BaseModel):
+    """User approves a plan proposed by the agent."""
+
+    type: Literal["approve_plan"]
+    plan_id: str  # This ID should correlate with a previously sent PlanPart
 
 
-class ChatPrompt(BaseModel):
-    type: Literal["chat"] = "chat"
+class ChatRequest(BaseModel):
+    """A standard chat message from the user."""
+
+    type: Literal["chat"]
     prompt: str
+
+
+UserPrompt = Union[
+    InlineEditRequest,
+    CreateFileRequest,
+    AnalyzeDocumentRequest,
+    ApprovePlanRequest,
+    ChatRequest,
+]
 
 
 class ComprehensiveResearchResult(BaseModel):

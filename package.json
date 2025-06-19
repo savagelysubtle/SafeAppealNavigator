@@ -1,0 +1,32 @@
+{
+  "name": "airesearchagent",
+  "version": "1.0.0",
+  "description": "This project builds upon the foundation of the [browser-use](https://github.com/browser-use/browser-use), which is designed to make websites accessible for AI agents.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:backend:orchestrator": "python -m src.ai_research_assistant.a2a_services.startup --agent-name ChiefLegalOrchestrator",
+    "start:backend:ui_gateway": "uvicorn src.ai_research_assistant.ag_ui_backend.main:app --host 0.0.0.0 --port 10200",
+    "start:frontend": "cd void-ide && npm run watch",
+    "dev": "concurrently \"npm:start:backend:*\" \"npm:start:frontend\"",
+    "build": "cd void-builder && npm install && npm run release"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/savagelysubtle/AiResearchAgent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/savagelysubtle/AiResearchAgent/issues"
+  },
+  "homepage": "https://github.com/savagelysubtle/AiResearchAgent#readme",
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
