@@ -2,25 +2,32 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../../../contexts/AppContext';
-import { searchWcatDecisions, fetchAndProcessWcatPdf } from '../../../services/wcatService';
+import { useAGUI } from '../../../hooks/useAGUI';
 import { WcatSearchResultItem, WcatCase, Tag } from '../../../types';
 import LoadingSpinner from '../../ui/LoadingSpinner';
 import { WCAT_BASE_URL, DEFAULT_WCAT_PATTERN_TAG_COLOR } from '../../../constants';
-import { identifyWcatCasePatterns } from '../../../services/geminiService';
 
 
 const WcatSearchPage: React.FC = () => {
-  const { 
-    addWcatCase, getWcatCaseByDecisionNumber, 
-    setIsLoading, isLoading, setError, addAuditLogEntry, apiKey,
-    mcpClient, // Get McpClient from context
-    generateAndAssignWcatPatternTags // For generating patterns after import
-  } = useAppContext();
-  
+const {
+addWcatCase, getWcatCaseByDecisionNumber,
+setIsLoading, isLoading, setError, addAuditLogEntry, apiKey,
+mcpClient, // Get McpClient from context
+generateAndAssignWcatPatternTags // For generating patterns after import
+} = useAppContext();
+
+const { searchWCAT, isConnected, sendMessage } = useAGUI({
+autoConnect: true,
+onError: (error) => {
+console.error('WCAT Search AG-UI Error:', error);
+setError('Backend connection error: ' + error.message);
+}
+});
+
   const [query, setQuery] = useState('');
   const [startDate, setStartDate] = useState('2020-01-01');
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [classification, setClassification] = useState('noteworthy'); 
+  const [classification, setClassification] = useState('noteworthy');
   const [isPerformingDeepSearch, setIsPerformingDeepSearch] = useState(false);
 
   const [searchResults, setSearchResults] = useState<WcatSearchResultItem[]>([]);
@@ -34,14 +41,28 @@ const WcatSearchPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     setSearchResults([]);
-    try {
-      const searchDetail = `Query: ${query}, Start: ${startDate}, End: ${endDate}, Class: ${classification}, Deep: ${isPerformingDeepSearch}`;
-      addAuditLogEntry('WCAT_SEARCH_INITIATED', searchDetail);
-      // Pass isPerformingDeepSearch to the service
-      const results = await searchWcatDecisions(query, startDate, endDate, classification, isPerformingDeepSearch);
-      setSearchResults(results);
-      addAuditLogEntry('WCAT_SEARCH_COMPLETED', `Found ${results.length} WCAT results. ${searchDetail}`);
-    } catch (err: any) {
+      try {
+    const searchDetail = `Query: ${query}, Start: ${startDate}, End: ${endDate}, Class: ${classification}, Deep: ${isPerformingDeepSearch}`;
+    addAuditLogEntry('WCAT_SEARCH_INITIATED', searchDetail);
+
+    if (!isConnected) {
+      throw new Error('Backend connection not available');
+    }
+
+    // Use AG-UI backend for WCAT search
+    await searchWCAT(query, {
+      startDate,
+      endDate,
+      classification,
+      deepSearch: isPerformingDeepSearch
+    });
+
+    // For now, simulate results since we need the backend to return them via events
+    // TODO: Update when backend implements proper WCAT search response handling
+    const results: WcatSearchResultItem[] = [];
+    setSearchResults(results);
+    addAuditLogEntry('WCAT_SEARCH_COMPLETED', `WCAT search sent to backend. ${searchDetail}`);
+  } catch (err: any) {
       setError(`WCAT Search Error: ${err.message}`);
       addAuditLogEntry('WCAT_SEARCH_ERROR', `Error: ${err.message}`);
     } finally {
@@ -61,18 +82,25 @@ const WcatSearchPage: React.FC = () => {
     setProcessingCaseId(searchResult.decisionNumber);
     setIsLoading(true);
     setError(null);
-    try {
-      // Pass mcpClient to fetchAndProcessWcatPdf
-      const caseDataPartial = await fetchAndProcessWcatPdf(searchResult.pdfUrl, searchResult.decisionNumber, addAuditLogEntry, mcpClient);
-      const newCase = await addWcatCase(caseDataPartial as Omit<WcatCase, 'id' | 'ingestedAt' | 'tags'>);
-      alert(`Case ${searchResult.decisionNumber} imported successfully! Path: ${newCase.mcpPath || 'N/A'}. Now attempting to generate pattern tags...`);
-      
-      // After successful import, generate and assign pattern tags
-      await generateAndAssignWcatPatternTags(newCase.id);
-      addAuditLogEntry('WCAT_CASE_PATTERNS_QUEUED', `Pattern tag generation initiated for ${newCase.decisionNumber}.`);
-      alert(`Pattern tag generation complete for ${newCase.decisionNumber}. Check the case in the database.`);
+      try {
+    if (!isConnected) {
+      throw new Error('Backend connection not available');
+    }
 
-    } catch (err: any) {
+    // Use AG-UI backend to import and process WCAT case
+    await sendMessage(`Import WCAT case from ${searchResult.pdfUrl} with decision number ${searchResult.decisionNumber}`, {
+      action: 'import_wcat_case',
+      pdfUrl: searchResult.pdfUrl,
+      decisionNumber: searchResult.decisionNumber,
+      generatePatterns: true
+    });
+
+    // For now, show a message that the request was sent to backend
+    // TODO: Handle the actual response from backend when it processes the case
+    alert(`WCAT case ${searchResult.decisionNumber} import request sent to backend. Processing will continue in the background.`);
+    addAuditLogEntry('WCAT_IMPORT_REQUESTED', `Import request sent to backend for ${searchResult.decisionNumber}`);
+
+  } catch (err: any) {
       setError(`Failed to import WCAT Case ${searchResult.decisionNumber}: ${err.message}`);
       addAuditLogEntry('WCAT_IMPORT_ERROR', `Import failed for ${searchResult.decisionNumber}: ${err.message}`);
     } finally {
@@ -84,12 +112,18 @@ const WcatSearchPage: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       <h2 className="text-3xl font-semibold text-textPrimary">Search WCAT Decisions</h2>
-      
-      {!apiKey && (
-        <div className="p-4 bg-yellow-100 dark:bg-yellow-900 border border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md">
-          Warning: Gemini API Key is not set. AI features for processing cases will not work. Please go to Settings to configure it.
-        </div>
-      )}
+
+        {!isConnected && (
+    <div className="p-4 bg-red-100 dark:bg-red-900 border border-red-500 text-red-700 dark:text-red-300 rounded-md">
+      Backend Connection: Disconnected. WCAT search and import features require backend connection.
+    </div>
+  )}
+
+  {!apiKey && (
+    <div className="p-4 bg-yellow-100 dark:bg-yellow-900 border border-yellow-500 text-yellow-700 dark:text-yellow-300 rounded-md">
+      Warning: Gemini API Key is not set. AI features for processing cases will not work. Please go to Settings to configure it.
+    </div>
+  )}
 
       <form onSubmit={handleSearch} className="bg-surface p-6 rounded-lg shadow border border-border space-y-4">
         <div>
@@ -106,7 +140,7 @@ const WcatSearchPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="wcat-start-date" className="block text-sm font-medium text-textSecondary">Start Date</label>
-            <input type="date" id="wcat-start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} 
+            <input type="date" id="wcat-start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
                    className="mt-1 block w-full px-3 py-2 bg-background border border-border rounded-md shadow-sm"/>
           </div>
           <div>
@@ -125,10 +159,10 @@ const WcatSearchPage: React.FC = () => {
             </select>
           </div>
           <div className="flex items-center">
-            <input 
-                type="checkbox" 
-                id="deep-search-toggle" 
-                checked={isPerformingDeepSearch} 
+            <input
+                type="checkbox"
+                id="deep-search-toggle"
+                checked={isPerformingDeepSearch}
                 onChange={(e) => setIsPerformingDeepSearch(e.target.checked)}
                 className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary mr-2"
             />
@@ -161,7 +195,7 @@ const WcatSearchPage: React.FC = () => {
                     disabled={(isLoading && processingCaseId === item.decisionNumber) || !!getWcatCaseByDecisionNumber(item.decisionNumber)}
                     className="bg-secondary text-white px-3 py-1.5 rounded-md hover:bg-secondary-dark text-sm disabled:opacity-50 whitespace-nowrap"
                   >
-                    {isLoading && processingCaseId === item.decisionNumber ? <LoadingSpinner size="sm" /> : 
+                    {isLoading && processingCaseId === item.decisionNumber ? <LoadingSpinner size="sm" /> :
                      (getWcatCaseByDecisionNumber(item.decisionNumber) ? 'Imported' : 'Import & Process')}
                   </button>
                 </div>

@@ -2,8 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { EvidenceFile, Tag, ChatMessage, AuditLogEntry, Theme, McpServerStatus, WcatCase, PolicyManual, PolicyEntry, PolicyReference, SavedChatSession, McpUserProvidedServers, McpApiConfig, AiTool, McpServerProcessConfig, DynamicMarker, McpStdioOptions } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { POLICY_NUMBER_REGEX, DEFAULT_WCAT_PATTERN_TAG_COLOR } from '../constants';
-import { McpClient } from '../services/McpClient';
-import { identifyWcatCasePatterns, resetChatSession as resetGeminiChatSession, extractPolicyEntriesFromManualText } from '../services/geminiService';
+// Removed direct MCP client imports - MCP is now handled entirely by the backend
+// Frontend only manages UI state for MCP server configuration
+// All MCP operations go through backend API endpoints at /api/mcp/*
+import { getMCPServerStatus, writeMCPFile, deleteMCPFile } from '../AppContextHelper';
 
 console.log("AppContext.tsx: Module loaded.");
 
@@ -26,8 +28,8 @@ interface AppContextType {
   addAuditLogEntry: (action: string, details: string, status?: 'info' | 'success' | 'warning' | 'error') => void;
   mcpServerStatus: McpServerStatus;
   setMcpServerStatus: (status: McpServerStatus) => void;
-  mcpClient: McpClient | null;
-  isMcpClientLoading: boolean;
+  // MCP client removed - all MCP operations now go through backend API
+  refreshMcpStatus: () => Promise<void>;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   currentError: string | null;
@@ -111,9 +113,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [wcatCases, setWcatCases] = useState<WcatCase[]>([]);
   const [policyManuals, setPolicyManuals] = useState<PolicyManual[]>([]);
 
-  const [mcpClientInstance, setMcpClientInstance] = useState<McpClient | null>(null);
-  const [isMcpClientLoading, setIsMcpClientLoading] = useState<boolean>(true);
-  const [mcpServerStatus, setMcpServerStatus] = useState<McpServerStatus>({ isRunning: false, error: "Initializing MCP Client..." });
+  // MCP client state removed - all MCP operations now go through backend API
+  const [mcpServerStatus, setMcpServerStatus] = useState<McpServerStatus>({ isRunning: false, error: "Checking MCP Server..." });
 
   const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState<boolean>(false);
   const [savedChatSessions, setSavedChatSessions] = useState<SavedChatSession[]>([]);
@@ -154,280 +155,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [addAuditLogEntry]);
 
+  // Add refreshMcpStatus function for Settings page
+  const refreshMcpStatus = useCallback(async () => {
+    try {
+      const status = await getMCPServerStatus();
+      setMcpServerStatus(status);
+      addAuditLogEntry('MCP_STATUS_REFRESHED', 'MCP server status refreshed via backend API.');
+    } catch (error: any) {
+      const errorMsg = `Failed to refresh MCP status: ${error.message}`;
+      setMcpServerStatus({ isRunning: false, error: errorMsg });
+      localSetError(errorMsg);
+      addAuditLogEntry('MCP_STATUS_REFRESH_ERROR', errorMsg);
+    }
+  }, [addAuditLogEntry, localSetError]);
+
   useEffect(() => {
+    // Simplified initialization - just load configs and refresh MCP status
     const initializeSystem = async () => {
-      console.log("AppContext.tsx: initializeSystem async function STARTED.");
-      setIsMcpClientLoading(true);
-      localSetError(null); // Clear previous general errors
+      console.log("AppContext.tsx: initializeSystem (backend API version) STARTED.");
 
-      let combinedApiConfigs: McpApiConfig[] = [];
-
-      // 1. Fetch and process mcp.json (for stdio servers)
-      try {
-        addAuditLogEntry('MCP_CONFIG_LOAD_STDIO_ATTEMPT', 'Attempting to fetch mcp.json for stdio servers...');
-        const responseMcpJson = await fetch('/mcp.json'); // Ensure mcp.json is in public folder
-        addAuditLogEntry('MCP_CONFIG_LOAD_STDIO_FETCH_STATUS', `mcp.json fetch status: ${responseMcpJson.status}`);
-
-        if (responseMcpJson.ok) {
-          const mcpJsonData = await responseMcpJson.json();
-          if (mcpJsonData && mcpJsonData.mcpServers && typeof mcpJsonData.mcpServers === 'object') {
-            const parsedStdioConfigs: McpApiConfig[] = Object.entries(mcpJsonData.mcpServers)
-              .map(([name, serverDef]: [string, any]) => {
-                const expectedVersion = serverDef.expectedServerVersion || serverDef.expected_server_version;
-                const transportTypeString = serverDef.type === 'stdio' ? 'stdio' : 'http';
-                let transportTypeFinal: 'stdio' | 'http' | undefined = 'http';
-                if (transportTypeString === 'stdio') {
-                    transportTypeFinal = 'stdio';
-                } else if (transportTypeString === 'http') {
-                    transportTypeFinal = 'http';
-                } else {
-                    console.warn(`Unexpected transport type string: ${transportTypeString} for ${name}. Defaulting to http.`);
-                    transportTypeFinal = 'http';
-                }
-
-                return {
-                  configName: name,
-                  transportType: transportTypeFinal,
-                  stdioOptions: serverDef.type === 'stdio' ? {
-                    command: serverDef.command,
-                    args: serverDef.args,
-                    cwd: serverDef.cwd,
-                    env: serverDef.env,
-                  } : undefined,
-                  expectedServerVersion: expectedVersion,
-                };
-              })
-              .filter(config => config.transportType === 'stdio');
-
-            combinedApiConfigs = combinedApiConfigs.concat(parsedStdioConfigs);
-            addAuditLogEntry('MCP_CONFIGS_LOADED_STDIO_SUCCESS', `Loaded ${parsedStdioConfigs.length} stdio configurations from mcp.json.`);
-            console.log("AppContext.tsx: mcp.json loaded and processed for stdio servers.", parsedStdioConfigs);
-            // Also store the raw mcp.json definitions if needed elsewhere
-            setUserMcpServerDefinitions(mcpJsonData);
-
-          } else {
-            addAuditLogEntry('MCP_CONFIGS_PARSE_STDIO_WARN', `mcp.json does not contain a valid mcpServers object or is empty.`, 'warning');
-            console.warn("AppContext.tsx: mcp.json does not contain a valid mcpServers object or is empty.");
-          }
-        } else {
-          addAuditLogEntry('MCP_CONFIGS_LOAD_STDIO_FAIL', `Failed to load mcp.json: ${responseMcpJson.statusText} (status ${responseMcpJson.status})`, 'warning');
-          console.warn(`AppContext.tsx: Failed to load mcp.json (status: ${responseMcpJson.status}). Ensure it's in the public folder.`);
-        }
-      } catch (e: any) {
-        addAuditLogEntry('MCP_CONFIGS_FETCH_STDIO_ERROR', `Exception fetching or parsing mcp.json: ${e.message}`, 'error');
-        console.error("AppContext.tsx: Exception fetching or parsing mcp.json:", e);
-      }
-
-      // 2. Fetch and process mcp_api_configs.json (for HTTP servers)
-      //    This also serves as a fallback if localStorage for API configs isn't present or is invalid.
-      let httpConfigsFromDefaultFile: McpApiConfig[] = [];
-      try {
-        addAuditLogEntry('MCP_CONFIG_LOAD_HTTP_ATTEMPT', 'Attempting to fetch mcp_api_configs.json for HTTP servers...');
-        const responseApiConfigsJson = await fetch('/mcp_api_configs.json'); // Ensure mcp_api_configs.json is in public folder
-        addAuditLogEntry('MCP_CONFIG_LOAD_HTTP_FETCH_STATUS', `mcp_api_configs.json fetch status: ${responseApiConfigsJson.status}`);
-
-        if (responseApiConfigsJson.ok) {
-          const httpConfigsData = await responseApiConfigsJson.json();
-          if (Array.isArray(httpConfigsData) && httpConfigsData.every(c => c.configName)) {
-            httpConfigsFromDefaultFile = httpConfigsData.map(config => ({
-              ...config,
-              transportType: 'http',
-            }));
-            addAuditLogEntry('MCP_API_CONFIGS_LOADED_HTTP_SUCCESS', `Loaded ${httpConfigsFromDefaultFile.length} HTTP configurations from mcp_api_configs.json.`);
-            console.log("AppContext.tsx: mcp_api_configs.json loaded and processed for HTTP servers.", httpConfigsFromDefaultFile);
-          } else {
-            addAuditLogEntry('MCP_API_CONFIGS_PARSE_HTTP_WARN', `mcp_api_configs.json is not a valid array of configurations or is empty.`, 'warning');
-            console.warn("AppContext.tsx: mcp_api_configs.json is not a valid array of configurations or is empty.");
-          }
-        } else {
-          addAuditLogEntry('MCP_API_CONFIGS_LOAD_HTTP_FAIL', `Failed to load mcp_api_configs.json: ${responseApiConfigsJson.statusText} (status ${responseApiConfigsJson.status})`, 'warning');
-          console.warn(`AppContext.tsx: Failed to load mcp_api_configs.json (status: ${responseApiConfigsJson.status}). Ensure it's in the public folder.`);
-        }
-      } catch (e: any) {
-        addAuditLogEntry('MCP_API_CONFIGS_FETCH_HTTP_ERROR', `Exception fetching or parsing mcp_api_configs.json: ${e.message}`, 'error');
-        console.error("AppContext.tsx: Exception fetching or parsing mcp_api_configs.json:", e);
-      }
-
-      // Combine with HTTP configs from default file
-      combinedApiConfigs = combinedApiConfigs.concat(httpConfigsFromDefaultFile);
-
-      // Attempt to load API configs from localStorage (these might include user edits if you have a settings page to manage them)
+      // Load MCP configurations from localStorage or defaults
       const storedApiConfigsStr = localStorage.getItem('mcp-api-configurations');
-      let configsFromLocalStorage: McpApiConfig[] = [];
       if (storedApiConfigsStr) {
         try {
-          configsFromLocalStorage = JSON.parse(storedApiConfigsStr);
-          addAuditLogEntry('MCP_API_CONFIGS_LOADED_LS', `Loaded ${configsFromLocalStorage.length} API configurations from localStorage.`);
-           // Replace default HTTP with LS ones if they exist for HTTP, but keep stdio from mcp.json
-          const stdioFromMcpDotJson = combinedApiConfigs.filter(c => c.transportType === 'stdio');
-          const httpFromLS = configsFromLocalStorage.filter(c => c.transportType === 'http');
-          combinedApiConfigs = [...stdioFromMcpDotJson, ...httpFromLS];
-
-        } catch (e:any) {
-          addAuditLogEntry('MCP_API_CONFIGS_PARSE_LS_ERROR', `Failed to parse API configs from localStorage: ${e.message}. Using defaults/mcp.json.`, 'warning');
-          // combinedApiConfigs remains as loaded from files
-        }
-      }
-
-
-      // Deduplicate configurations, prioritizing stdio, then localStorage HTTP, then file HTTP
-      const uniqueConfigs: McpApiConfig[] = [];
-      const names = new Set<string>();
-
-      // Order of preference: stdio from mcp.json, then all from localStorage, then http from mcp_api_configs.json
-      // Note: combinedApiConfigs already reflects a preference for localStorage HTTP over file HTTP if LS was valid.
-      // The main goal here is to ensure stdio from mcp.json is present and that names are unique.
-      const configsToDeduplicate = [
-          ...combinedApiConfigs.filter(c => c.transportType === 'stdio'), // Stdio from mcp.json first
-          ...combinedApiConfigs.filter(c => c.transportType === 'http')    // HTTP from LS (if loaded) or mcp_api_configs.json
-      ];
-
-      for (const config of configsToDeduplicate) {
-        if (!names.has(config.configName)) {
-          uniqueConfigs.push(config);
-          names.add(config.configName);
-        } else {
-          addAuditLogEntry('MCP_CONFIG_DUPLICATE_IGNORED', `Duplicate config name "${config.configName}" (type: ${config.transportType}) ignored. Prioritized first encountered or stdio.`, 'warning');
-        }
-      }
-
-      setMcpApiConfigsInternal(uniqueConfigs); // Update state with the final list of configs
-      if (uniqueConfigs.length > 0) {
-        addAuditLogEntry('MCP_CONFIGS_SET_SUCCESS', `Total ${uniqueConfigs.length} unique MCP configurations loaded and set.`);
-        console.log("AppContext.tsx: Final unique MCP configurations set:", uniqueConfigs);
-      } else {
-        localSetError("No MCP server configurations found. Check mcp.json and mcp_api_configs.json in your public folder, and the console for errors.");
-        addAuditLogEntry('MCP_CONFIGS_LOAD_FINAL_FAILURE', 'No MCP configurations were loaded from any source.', 'error');
-        console.error("AppContext.tsx: No MCP configurations loaded from any source.");
-      }
-
-      // Determine and set active MCP configuration
-      let activeConfigToSet: McpApiConfig | null = null;
-      const activeConfigNameFromStorage = localStorage.getItem('mcp-active-api-config-name');
-      if (activeConfigNameFromStorage) {
-        activeConfigToSet = uniqueConfigs.find(c => c.configName === activeConfigNameFromStorage) || null;
-      }
-      if (!activeConfigToSet && uniqueConfigs.length > 0) {
-        activeConfigToSet = uniqueConfigs[0]; // Default to the first one if no active or previous active not found
-      }
-
-      setActiveApiConfigNameInternal(activeConfigToSet ? activeConfigToSet.configName : null);
-      if (activeConfigToSet) {
-        localStorage.setItem('mcp-active-api-config-name', activeConfigToSet.configName);
-        addAuditLogEntry('MCP_ACTIVE_CONFIG_DETERMINED', `Active MCP config to be used: ${activeConfigToSet.configName}`);
-        console.log("AppContext.tsx: Active API config to be used:", activeConfigToSet.configName);
-      } else {
-        localStorage.removeItem('mcp-active-api-config-name');
-        addAuditLogEntry('MCP_ACTIVE_CONFIG_NONE', 'No active MCP configuration could be set.');
-        console.log("AppContext.tsx: No active API config to set.");
-      }
-
-      // Initialize McpClient instance
-      const client = new McpClient(addAuditLogEntry);
-      await client.initialize(activeConfigToSet); // Initialize with the determined active config
-      setMcpClientInstance(client);
-      addAuditLogEntry('MCP_CLIENT_INSTANCE_INITIALIZED', `McpClient instance initialized. Ready: ${client.ready}. Error: ${client.getInitializationError() || 'None'}`);
-      console.log("AppContext.tsx: McpClient instance set. IsReady:", client.ready, "InitError:", client.getInitializationError());
-
-      // Check server status if client initialized
-      if (client.ready && activeConfigToSet) {
-        try {
-          addAuditLogEntry('MCP_STATUS_FETCH_ATTEMPT', `Fetching server status for ${activeConfigToSet.configName}...`);
-          const status = await client.getServerStatus();
-          setMcpServerStatus(status);
-          console.log("AppContext.tsx: MCP Server status received:", status);
-          if (!status.isRunning) {
-            const serverName = client.getConfiguredServerName() || 'MCP Server';
-            const targetDetail = activeConfigToSet.transportType === 'stdio'
-              ? `command '${activeConfigToSet.stdioOptions?.command}'`
-              : client.getConfiguredBaseUrl() || 'configured address';
-            const errorDetail = status.error ? `: ${status.error}` : '(no specific error reported).';
-
-            const isDefaultHttpConfig = activeConfigToSet.configName === "Default Local MCP Server" && activeConfigToSet.transportType === 'http';
-            const isNetworkError = status.error && (status.error.toLowerCase().includes("failed to fetch") || status.error.toLowerCase().includes("networkerror"));
-
-            if (isDefaultHttpConfig && isNetworkError) {
-              console.warn(`AppContext.tsx: Initial check: ${serverName} at ${targetDetail} appears to be offline. Global error suppressed for default HTTP config.`);
-              addAuditLogEntry('MCP_DEFAULT_HTTP_OFFLINE_STARTUP', `Initial check: ${serverName} at ${targetDetail} offline. Global error suppressed for this startup.`);
-            } else {
-              localSetError(`${serverName} (target: ${targetDetail}) Issue${errorDetail} File operations may fail.`);
-            }
-          } else {
-            localSetError(null); // Clear error if server is running
-          }
+          const configs = JSON.parse(storedApiConfigsStr);
+          setMcpApiConfigsInternal(configs);
+          addAuditLogEntry('MCP_CONFIGS_LOADED', `Loaded ${configs.length} MCP configurations from localStorage.`);
         } catch (e: any) {
-          const errorMessage = e.message || "Unknown error during MCP status check";
-          setMcpServerStatus({ isRunning: false, error: errorMessage });
-          localSetError(`Failed to get MCP status for ${activeConfigToSet.configName}: ${errorMessage}. File operations may fail.`);
-          console.error("AppContext.tsx: Error fetching MCP status for " + activeConfigToSet.configName + ":", e);
+          addAuditLogEntry('MCP_CONFIGS_PARSE_ERROR', `Failed to parse MCP configs: ${e.message}`);
         }
-      } else if (activeConfigToSet) { // Client not ready but there was an active config
-        const initError = client.getInitializationError() || `MCP Client failed to initialize for ${activeConfigToSet.configName}.`;
-        setMcpServerStatus({ isRunning: false, error: initError });
-        localSetError(initError + " File operations will likely fail.");
-        console.error(`AppContext.tsx: MCP Client not ready after initialize for ${activeConfigToSet.configName}. Error:`, initError);
-      } else { // No active config to initialize with
-         setMcpServerStatus({ isRunning: false, error: "No active MCP configuration to initialize client." });
       }
 
-      // Load AI Tools (combining localStorage and mcp.json derived tools)
+      // Set active config
+      const activeConfigName = localStorage.getItem('mcp-active-api-config-name');
+      if (activeConfigName) {
+        setActiveApiConfigNameInternal(activeConfigName);
+      }
+
+      // Refresh MCP status via backend
+      await refreshMcpStatus();
+
+      // Load tools from localStorage
       const storedToolsStr = localStorage.getItem('app-tools');
-      let toolsFromStorage: AiTool[] = [];
       if (storedToolsStr) {
-        try { toolsFromStorage = JSON.parse(storedToolsStr); }
-        catch (e: any) { addAuditLogEntry('APP_TOOLS_LS_PARSE_ERROR', `Failed to parse tools from localStorage: ${e.message}`, 'warning'); }
-      }
-
-      let derivedToolsFromMcpJson: AiTool[] = [];
-      const currentMcpJson = userMcpServerDefinitions || (await (async () => { try { const r = await fetch('/mcp.json'); if (r.ok) return await r.json(); } catch { return null; } })());
-
-      if (currentMcpJson && currentMcpJson.mcpServers) {
-        derivedToolsFromMcpJson = Object.entries(currentMcpJson.mcpServers).map(([name, config]: [string, any]) => ({
-          id: `mcp_server_tool_${name.replace(/\s+/g, '_').toLowerCase()}`,
-          name: `${name} (MCP Server)`,
-          description: config.description || `Represents the '${name}' MCP server process defined in mcp.json. Use to interact with its capabilities if no specific tool is listed.`,
-          type: 'mcp_server_representation', // A new type to distinguish these
-          usageExample: `Consider if tasks related to '${name}' are needed.`,
-          isAvailable: true, // Assumed available if defined
-          mcpProcessDetails: { // Storing for reference, not direct execution via chat agent
-            command: config.command,
-            args: config.args,
-            cwd: config.cwd,
-          },
-        }));
-      }
-
-      // Combine and deduplicate tools
-      const finalTools: AiTool[] = [];
-      const toolNames = new Set<string>();
-      // Priority: localStorage (user's custom tools), then mcp.json derived (server representations)
-      [...toolsFromStorage, ...derivedToolsFromMcpJson].forEach(tool => {
-        if (!toolNames.has(tool.name)) {
-          finalTools.push(tool);
-          toolNames.add(tool.name);
+        try {
+          const tools = JSON.parse(storedToolsStr);
+          setTools(tools);
+          addAuditLogEntry('TOOLS_LOADED', `Loaded ${tools.length} AI tools from localStorage.`);
+        } catch (e: any) {
+          addAuditLogEntry('TOOLS_PARSE_ERROR', `Failed to parse tools: ${e.message}`);
         }
-      });
-      setTools(finalTools);
-      addAuditLogEntry('TOOLS_INIT_COMPLETE', `${finalTools.length} AI tools loaded/derived.`);
-      console.log("AppContext.tsx: Tools initialized/loaded.", finalTools);
+      }
 
-      setIsMcpClientLoading(false);
-      addAuditLogEntry('APP_INIT_COMPLETE', 'Application initialization sequence complete.');
-      console.log(
-        "=========================================================\n" +
-        "AppContext.tsx: initializeSystem finally block equivalent.\n" +
-        `  IsMcpClientLoading: false\n` +
-        `  McpClient Instance available: ${!!mcpClientInstance}\n` + // Log current state value
-        `  McpClient Ready: ${mcpClientInstance?.ready}\n` +
-        `  McpClient Initialization Error: ${mcpClientInstance?.getInitializationError() || 'None'}\n` +
-        `  Current AppContext Error (from ref): ${currentErrorRef.current}\n` +
-        "========================================================="
-      );
+      addAuditLogEntry('APP_INIT_COMPLETE', 'Application initialization complete (backend API mode).');
     };
 
     initializeSystem();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addAuditLogEntry, localSetError]); // Keep deps minimal for this main init effect
+  }, [addAuditLogEntry, localSetError, refreshMcpStatus]);
 
 
   const updateMcpApiConfigs = useCallback((newConfigs: McpApiConfig[]) => {
@@ -735,7 +519,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSelectedFileIdsForContext([]);
     setSelectedWcatCaseIdsForContext([]);
     setSelectedToolIdsForContext([]);
-    resetGeminiChatSession();
+    // TODO: Implement chat session reset through AG-UI backend
+    // resetGeminiChatSession() - replaced with backend call
     addAuditLogEntry('CHAT_CLEARED', 'Chat history, AI session, and all context items cleared.');
   }, [addAuditLogEntry]);
 
@@ -806,7 +591,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setIsLoading(true);
     try {
       addAuditLogEntry('WCAT_PATTERN_GEN_START', `Starting pattern generation for WCAT case ${targetCase.decisionNumber}`);
-      const patternStrings = await identifyWcatCasePatterns(targetCase.rawTextContent);
+      // TODO: Implement WCAT pattern identification through AG-UI backend
+    // const patternStrings = await identifyWcatCasePatterns(targetCase.rawTextContent);
+    const patternStrings: string[] = []; // Placeholder until backend implementation
       const patternTags: Tag[] = [];
       for (const pStr of patternStrings) {
         const tag = addTag({ name: pStr, color: DEFAULT_WCAT_PATTERN_TAG_COLOR, criteria: 'wcat_pattern_generic', scope: 'wcat_pattern' });
@@ -860,7 +647,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let policyEntries: PolicyEntry[] = [];
     try {
         addAuditLogEntry('POLICY_MANUAL_INDEXING_START', `AI indexing started for manual ${manualInfo.manualName}`);
-        policyEntries = await extractPolicyEntriesFromManualText(rawTextContent, manualInfo.manualName);
+        // TODO: Implement policy extraction through AG-UI backend
+      // policyEntries = await extractPolicyEntriesFromManualText(rawTextContent, manualInfo.manualName);
+      policyEntries = []; // Placeholder until backend implementation
         addAuditLogEntry('POLICY_MANUAL_INDEXING_SUCCESS', `AI indexing complete for ${manualInfo.manualName}. Found ${policyEntries.length} entries.`);
     } catch(error: any) {
         localSetError(`AI failed to index policy manual ${manualInfo.manualName}: ${error.message}`);
@@ -981,7 +770,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSelectedFileIdsForContext(sessionToLoad.relatedFileIds || []);
         setSelectedWcatCaseIdsForContext(sessionToLoad.relatedWcatCaseIds || []);
         setSelectedToolIdsForContext(sessionToLoad.relatedToolIds || []);
-        resetGeminiChatSession();
+        // TODO: Implement chat session reset through AG-UI backend
+      // resetGeminiChatSession() - replaced with backend call
         addAuditLogEntry('CHAT_SESSION_LOADED', `Session "${sessionToLoad.name}" loaded.`);
         return sessionToLoad;
     }
@@ -1060,7 +850,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       tags, addTag, removeTagFromFile, addTagToFile,
       chatHistory, addChatMessage, clearChatHistory,
       auditLog, addAuditLogEntry,
-      mcpServerStatus, setMcpServerStatus, mcpClient: mcpClientInstance, isMcpClientLoading,
+      mcpServerStatus, setMcpServerStatus, refreshMcpStatus,
       isLoading, setIsLoading,
       currentError, setError: localSetError,
       apiKey, setApiKey,

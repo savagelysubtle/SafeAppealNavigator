@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { Theme, AuditLogEntry, McpServerStatus, McpApiConfig } from '../../types';
 import ToggleSwitch from '../ui/ToggleSwitch';
-import { testApiKey as testGeminiApiKey } from '../../services/geminiService';
+// Remove direct geminiService import - use AG-UI backend instead
 import LoadingSpinner from '../ui/LoadingSpinner';
+import { getMCPServerStatus } from '../../contexts/AppContextHelper';
 
 const SettingsPage: React.FC = () => {
   const {
     theme, toggleTheme, auditLog, addAuditLogEntry,
     mcpServerStatus: contextMcpStatus, setMcpServerStatus,
     apiKey: currentApiKey, setApiKey: setContextApiKey,
-    setError, mcpClient, isMcpClientLoading,
+    setError, // mcpClient and isMcpClientLoading removed - using backend API
     mcpApiConfigs, activeApiConfigName,
     setActiveApiConfig, updateMcpApiConfigs
   } = useAppContext();
@@ -36,48 +37,46 @@ const SettingsPage: React.FC = () => {
 
 
   const fetchMcpStatus = async () => {
-    if (mcpClient && mcpClient.ready) {
-      try {
-        const status = await mcpClient.getServerStatus();
-        setMcpServerStatus(status);
-        setCurrentMcpStatus(status);
-      } catch (err: any) {
-        setError(`Failed to refresh MCP server status: ${err.message}`);
-        const errorStatus = { isRunning: false, error: err.message };
-        setMcpServerStatus(errorStatus);
-        setCurrentMcpStatus(errorStatus);
-      }
-    } else if (!isMcpClientLoading) {
-        const errorMsg = mcpClient?.getInitializationError() || "MCP Client not available/initialized.";
-        setError(`MCP Client not ready: ${errorMsg}`);
-        const errorStatus = { isRunning: false, error: errorMsg };
-        setMcpServerStatus(errorStatus);
-        setCurrentMcpStatus(errorStatus);
+    try {
+      // Use backend API instead of direct MCP client
+      const status = await getMCPServerStatus();
+      const mcpStatus = {
+        isRunning: status.isRunning,
+        error: status.error || undefined,
+        version: status.version,
+        allowedDirectories: status.allowedDirectories || []
+      };
+      setMcpServerStatus(mcpStatus);
+      setCurrentMcpStatus(mcpStatus);
+    } catch (err: any) {
+      setError(`Failed to refresh MCP server status: ${err.message}`);
+      const errorStatus = { isRunning: false, error: err.message };
+      setMcpServerStatus(errorStatus);
+      setCurrentMcpStatus(errorStatus);
     }
   };
 
   useEffect(() => {
-    if(!isMcpClientLoading && mcpClient) fetchMcpStatus();
+    // Fetch MCP status on component mount using backend API
+    fetchMcpStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mcpClient, isMcpClientLoading]);
+  }, []); // Empty dependency array - only run on mount
 
 
   const handleAddDirectory = async () => {
-    if (newAllowedDir.trim() === '' || !mcpClient || !mcpClient.ready) {
-        setError(!mcpClient || !mcpClient.ready ? "MCP Client not ready." : "Directory path cannot be empty.");
+    if (newAllowedDir.trim() === '') {
+        setError("Directory path cannot be empty.");
         return;
     }
     try {
-      const success = await mcpClient.addAllowedDirectory(newAllowedDir);
-      if (success) {
-        addAuditLogEntry('MCP_DIRECTORY_ADDED_CLIENT', `Directory "${newAllowedDir}" add request sent to server.`);
-        setNewAllowedDir('');
-        await fetchMcpStatus();
-      } else {
-        setError(`Server failed to process "add directory" request for "${newAllowedDir}". Check server logs.`);
-      }
+      // TODO: Implement add directory functionality through backend API
+      // For now, just show a placeholder message
+      addAuditLogEntry('MCP_DIRECTORY_ADD_REQUESTED', `Directory "${newAllowedDir}" add request (backend implementation pending).`);
+      setNewAllowedDir('');
+      await fetchMcpStatus();
+      setError("Add directory functionality will be implemented through backend API.");
     } catch (err: any) {
-      setError(`Error sending "add directory" request to MCP server: ${err.message}`);
+      setError(`Error processing add directory request: ${err.message}`);
     }
   };
 
@@ -85,22 +84,40 @@ const SettingsPage: React.FC = () => {
     setIsTestingApiKey(true);
     setApiKeyTestResult(null);
     setError(null);
-    const originalEnvKey = process.env.API_KEY;
-    (process.env as any).API_KEY = localApiKey;
 
-    const testSuccess = await testGeminiApiKey();
+    try {
+      // Test API key through AG-UI backend instead of direct frontend call
+      const response = await fetch('http://localhost:10200/api/test-api-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: 'google',
+          apiKey: localApiKey,
+          model: 'gemini-1.5-flash' // Use stable model for testing
+        }),
+      });
 
-    (process.env as any).API_KEY = originalEnvKey;
+      const result = await response.json();
 
-    if (testSuccess) {
-      setContextApiKey(localApiKey);
-      setApiKeyTestResult("API Key is valid and saved!");
-      addAuditLogEntry('API_KEY_UPDATED', 'Gemini API Key updated successfully.');
-    } else {
-      const errorMsg = "API Key is invalid. Please check and try again.";
+      if (response.ok && result.success) {
+        setContextApiKey(localApiKey);
+        setApiKeyTestResult("API Key is valid and saved!");
+        addAuditLogEntry('API_KEY_UPDATED', 'Google API Key tested and updated successfully via backend.');
+      } else {
+        const errorMsg = result.message || "API Key test failed. Please check your key and try again.";
+        setApiKeyTestResult(errorMsg);
+        setError(errorMsg);
+        addAuditLogEntry('API_KEY_TEST_FAILED', `API Key test failed: ${errorMsg}`);
+      }
+    } catch (error) {
+      const errorMsg = `Error testing API key: ${error instanceof Error ? error.message : 'Unknown error'}`;
       setApiKeyTestResult(errorMsg);
       setError(errorMsg);
+      addAuditLogEntry('API_KEY_TEST_ERROR', errorMsg);
     }
+
     setIsTestingApiKey(false);
   };
 
@@ -217,17 +234,17 @@ const SettingsPage: React.FC = () => {
       </section>
 
       <section className="bg-surface p-6 rounded-lg shadow-modern-md dark:shadow-modern-md-dark border border-border">
-        <h3 className="text-xl font-semibold text-textPrimary mb-4">Gemini API Key</h3>
+        <h3 className="text-xl font-semibold text-textPrimary mb-4">LLM Provider API Key</h3>
         <p className="text-sm text-textSecondary mb-2">
-          The API key is ideally set via the <code className="bg-background px-1 rounded">API_KEY</code> environment variable.
-          You can also set it here for the current session.
+          API keys are managed by the backend through the <code className="bg-background px-1 rounded">.env</code> file (GOOGLE_API_KEY, OPENAI_API_KEY, etc.).
+          You can test the current Google API key here. Changes are for the current session only.
         </p>
         <div className="flex flex-col sm:flex-row gap-2 items-start">
           <input
             type="password"
             value={localApiKey}
             onChange={(e) => setLocalApiKey(e.target.value)}
-            placeholder="Enter your Gemini API Key"
+            placeholder="Enter API Key to test (Google/Gemini)"
             className="flex-grow mt-1 block w-full px-3 py-2 bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
           />
           <button
@@ -235,7 +252,7 @@ const SettingsPage: React.FC = () => {
             disabled={isTestingApiKey || !localApiKey}
             className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 whitespace-nowrap"
           >
-            {isTestingApiKey ? <LoadingSpinner size="sm" /> : 'Test & Save Key'}
+            {isTestingApiKey ? <LoadingSpinner size="sm" /> : 'Test via Backend'}
           </button>
         </div>
         {apiKeyTestResult && (
@@ -245,7 +262,7 @@ const SettingsPage: React.FC = () => {
         )}
          {!currentApiKey && !localApiKey && (
            <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-400">
-             Current API Key is not set. AI features might not work.
+             No API Key set for testing. The backend uses keys from .env file (GOOGLE_API_KEY, etc.).
            </p>
          )}
       </section>
@@ -259,7 +276,7 @@ const SettingsPage: React.FC = () => {
                 id="active-api-config"
                 value={selectedActiveConfigInDropdown}
                 onChange={handleActiveApiConfigChange}
-                disabled={isMcpClientLoading || mcpApiConfigs.length === 0}
+                disabled={mcpApiConfigs.length === 0}
                 className="mt-1 block w-full px-3 py-2 bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
             >
                 {mcpApiConfigs.length === 0 && <option value="">No API configurations loaded</option>}
@@ -270,10 +287,7 @@ const SettingsPage: React.FC = () => {
         </div>
 
         <h4 className="text-lg font-medium text-textPrimary mt-4 mb-1">Server Status (using "{selectedActiveConfigInDropdown || 'N/A'}")</h4>
-         {isMcpClientLoading && <LoadingSpinner message="Initializing MCP Client..." />}
-         {!isMcpClientLoading && mcpClient && !mcpClient.ready && (
-            <p className="text-sm text-red-500">MCP Client Error: {mcpClient.getInitializationError()}</p>
-         )}
+        {/* MCP client loading status removed - status comes from backend API */}
         <div className="text-sm space-y-1 text-textSecondary">
           <p>Status: {currentMcpStatus.isRunning ?
             <span className="text-green-500 font-semibold">Running</span> :
@@ -293,7 +307,7 @@ const SettingsPage: React.FC = () => {
             </ul>
           ) : <p>No directories configured or status unavailable.</p>}
         </div>
-        <button onClick={fetchMcpStatus} disabled={isMcpClientLoading || !mcpClient} className="mt-2 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50">Refresh MCP Status</button>
+        <button onClick={fetchMcpStatus} className="mt-2 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Refresh MCP Status</button>
 
         <div className="mt-4">
           <label htmlFor="new-dir" className="block text-sm font-medium text-textSecondary">Add Allowed Directory (via active MCP connection)</label>
@@ -309,7 +323,7 @@ const SettingsPage: React.FC = () => {
             <button
               onClick={handleAddDirectory}
               className="bg-secondary text-white px-4 py-2 rounded-lg hover:bg-secondary-dark transition-colors"
-              disabled={newAllowedDir.trim() === '' || !mcpClient || !mcpClient.ready}
+              disabled={newAllowedDir.trim() === ''}
             >
               Add
             </button>

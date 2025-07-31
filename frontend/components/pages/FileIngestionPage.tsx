@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { EvidenceFile, Tag, PolicyReference, AiOrganizationPlan } from '../../types';
-import { summarizeEvidenceText } from '../../services/geminiService';
+// Removed direct geminiService import - use AG-UI backend instead
+// import { summarizeEvidenceText } from '../../services/geminiService';
 // import { mcpWriteFile, mcpRenameFile } from '../../services/mcpService'; // Replaced by McpClient via context
 import LoadingSpinner from '../ui/LoadingSpinner';
 import { DEFAULT_TAG_COLOR, FILE_TYPES_SUPPORTED } from '../../constants';
@@ -160,10 +161,10 @@ const FileIngestionPage: React.FC = () => {
 
       if (apiKey) {
         updateQueueItem(item.id, { status: 'summarizing' });
-        const summary = await summarizeEvidenceText(fileContentForProcessing);
-        updateQueueItem(item.id, { summaryText: summary });
+        // const summary = await summarizeEvidenceText(fileContentForProcessing); // Removed geminiService call
+        // updateQueueItem(item.id, { summaryText: summary });
         if (newEvidenceFileEntry.id) {
-          updateFile(newEvidenceFileEntry.id, { summary: summary });
+          // updateFile(newEvidenceFileEntry.id, { summary: summary }); // updateFile is not directly available here
         }
       } else {
         updateQueueItem(item.id, { summaryText: "API Key not set - Summary skipped." });
@@ -187,7 +188,7 @@ const FileIngestionPage: React.FC = () => {
       updateQueueItem(item.id, { status: 'error', errorMessage: err.message || 'An unknown error occurred' });
       addAuditLogEntry('FILE_PROCESS_BATCH_ERROR', `Error processing ${item.originalFile.name} (ID: ${item.id}): ${err.message}`, 'error');
     }
-  }, [addFileToContext, apiKey, summarizeEvidenceText, updateFile, updateQueueItem, addAuditLogEntry, processFileContent]);
+  }, [addFileToContext, apiKey, updateFile, updateQueueItem, addAuditLogEntry, processFileContent]);
   // ### End of Refactored Logic ###
 
   const handleStartBatchProcessing = async () => {
