@@ -8,7 +8,7 @@ import { SIMULATED_CONTEXT_WINDOW_TOKENS, SIMULATED_TOKEN_WARNING_THRESHOLD } fr
 // import { summarizeEvidenceText } from '../../services/geminiService';
 
 // AG-UI Imports
-import { GeminiAgUiAgent } from '../../services/AgUiAgentService';
+import { AGUIClient } from '../../services/AGUIClient';
 import {
     RunAgentInput, BaseEvent, EventType, Message as AgUiMessage, Tool as AgUiToolDefinition, Context as AgUiClientContextType, ToolCall, Message, CustomEvent, // Renamed Context to AgUiClientContextType
     RunStartedEvent, TextMessageStartEvent, TextMessageContentEvent, TextMessageEndEvent, ToolCallStartEvent, ToolCallArgsEvent, ToolCallEndEvent, RunFinishedEvent, RunErrorEvent
@@ -42,14 +42,14 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
     initialEvidenceContext = [],
     initialWcatContext = []
 }) => {
-  const { setIsLoading: setAppIsLoading, setError: setAppError, apiKey, addAuditLogEntry, mcpClient, updateFile, getFileById } = useAppContext();
+  const { setIsLoading: setAppIsLoading, setError: setAppError, apiKey, addAuditLogEntry, updateFile, getFileById } = useAppContext();
   const [userInput, setUserInput] = useState('');
   const [localChatHistory, setLocalChatHistory] = useState<AgUiMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [currentTotalEstTokens, setCurrentTotalEstTokens] = useState(0);
 
-  const [agUiAgentModal, setAgUiAgentModal] = useState<GeminiAgUiAgent | null>(null);
+  const [agUiAgentModal, setAgUiAgentModal] = useState<AGUIClient | null>(null);
   const [currentAgUiSubscriptionModal, setCurrentAgUiSubscriptionModal] = useState<Subscription | null>(null);
   const [streamingAgUiMessageModal, setStreamingAgUiMessageModal] = useState<AgUiMessage | null>(null);
   const [currentToolCallsModal, setCurrentToolCallsModal] = useState<Record<string, Partial<ToolCall & { argsString?: string }>>>({});
@@ -74,13 +74,14 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
   }, [initialEvidenceContext, initialWcatContext]);
 
   useEffect(() => {
-    const agent = new GeminiAgUiAgent({ mcpClient });
-    setAgUiAgentModal(agent);
+    // TODO: Re-implement AG-UI agent when service is available
+    // const agent = new AGUIClient({});
+    // setAgUiAgentModal(agent);
     return () => {
       currentAgUiSubscriptionModal?.unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mcpClient]);
+  }, []);
 
 
   useEffect(() => {
@@ -159,16 +160,17 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
                 if (!file) throw new Error(`Evidence file ID ${args.documentId} not in current context.`);
                 docName = file.name;
                 textToSummarize = file.content || file.summary || "";
-                 if (!textToSummarize && file.mcpPath && mcpClient && mcpClient.ready) {
-                    const mcpFile = await mcpClient.readFile(file.mcpPath);
-                    if (mcpFile?.content) {
-                        textToSummarize = mcpFile.content;
-                        // Optionally update file in global context if content was fetched
-                        // updateFile(file.id, { content: textToSummarize });
-                    } else {
-                        throw new Error(`Could not load content for ${file.name} from MCP.`);
-                    }
-                }
+                // TODO: Re-implement MCP file reading when mcpClient is available
+                // if (!textToSummarize && file.mcpPath && mcpClient && mcpClient.ready) {
+                //     const mcpFile = await mcpClient.readFile(file.mcpPath);
+                //     if (mcpFile?.content) {
+                //         textToSummarize = mcpFile.content;
+                //         // Optionally update file in global context if content was fetched
+                //         // updateFile(file.id, { content: textToSummarize });
+                //     } else {
+                //         throw new Error(`Could not load content for ${file.name} from MCP.`);
+                //     }
+                // }
             } else if (args.type === 'wcat') {
                 const wcase = initialWcatContext.find(c => c.id === args.documentId);
                 if (!wcase) throw new Error(`WCAT case ID ${args.documentId} not in current context.`);
@@ -190,7 +192,8 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
   };
 
   const runAgentWithInputModal = (messages: AgUiMessage[], runIdForContinuation?: string) => {
-    if (!agUiAgentModal || !agUiAgentModal.publicRun) return;
+    // TODO: Re-implement when AG-UI agent is properly configured
+    if (!agUiAgentModal) return;
     currentAgUiSubscriptionModal?.unsubscribe();
 
     const runId = runIdForContinuation || uuidv4();
@@ -220,8 +223,14 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
 
     setIsSending(true);
     setAppIsLoading(true);
-    const runObservable = agUiAgentModal.publicRun(runAgentInputTyped);
+    // TODO: Re-implement when AG-UI agent service is available
+    // const runObservable = agUiAgentModal.publicRun(runAgentInputTyped);
+    setIsSending(false);
+    setAppIsLoading(false);
+    return;
 
+    // TODO: Re-implement subscription when AG-UI is available
+    /*
     const subscription = runObservable.subscribe({
       next: (event: BaseEvent) => {
         const eventRunId = (event as any).runId || runId;
@@ -312,7 +321,7 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
             break;
         }
       },
-      error: (err) => {
+      error: (err: any) => {
         setAppError(`Modal AG-UI Observable Error: ${err.message || 'Unknown'}`);
         setIsSending(false);
         setAppIsLoading(false);
@@ -320,6 +329,7 @@ const ChatPopupModal: React.FC<ChatPopupModalProps> = ({
       }
     });
     setCurrentAgUiSubscriptionModal(subscription);
+    */
   };
 
   const handleSendMessage = (e: React.FormEvent) => {

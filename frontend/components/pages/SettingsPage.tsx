@@ -25,6 +25,7 @@ const SettingsPage: React.FC = () => {
   const [apiConfigsJson, setApiConfigsJson] = useState<string>('');
   const [selectedActiveConfigInDropdown, setSelectedActiveConfigInDropdown] = useState<string>(activeApiConfigName || '');
   const [importedFileError, setImportedFileError] = useState<string | null>(null);
+  const [mcpConfigJson, setMcpConfigJson] = useState<string>('');
 
   useEffect(() => {
     setCurrentMcpStatus(contextMcpStatus);
@@ -184,19 +185,52 @@ const SettingsPage: React.FC = () => {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const parsedData: McpApiConfig[] = JSON.parse(text);
+        const rawData = JSON.parse(text);
+        let parsedData: McpApiConfig[] = [];
 
-        // Basic validation
-        if (!Array.isArray(parsedData)) {
-          throw new Error("Imported file is not a JSON array.");
+        // Check if it's a standard MCP client configuration
+        if (rawData.mcpServers && typeof rawData.mcpServers === 'object') {
+          // Convert standard MCP configuration to McpApiConfig format
+          parsedData = Object.entries(rawData.mcpServers).map(([serverName, serverConfig]: [string, any]) => {
+            const config: McpApiConfig = {
+              configName: serverName,
+              transportType: serverConfig.type === 'stdio' ? 'stdio' : 'http'
+            };
+
+            if (serverConfig.type === 'stdio') {
+              config.stdioOptions = {
+                command: serverConfig.command,
+                args: serverConfig.args || [],
+                cwd: serverConfig.cwd,
+                env: serverConfig.env
+              };
+            } else {
+              // For HTTP or other types, try to infer baseApiUrl
+              config.baseApiUrl = serverConfig.baseApiUrl || `http://localhost:8080`;
+              config.endpoints = serverConfig.endpoints || {};
+            }
+
+            return config;
+          });
+
+          addAuditLogEntry('MCP_STANDARD_CONFIG_CONVERTED', `Converted standard MCP configuration with ${parsedData.length} servers.`);
         }
-        if (parsedData.length > 0 && !parsedData.every(c => c.configName && c.baseApiUrl && c.endpoints && typeof c.endpoints === 'object')) {
-          throw new Error("Imported JSON array does not match the expected McpApiConfig structure. Each object must have 'configName', 'baseApiUrl', and 'endpoints'.");
+        // Check if it's already in McpApiConfig array format
+        else if (Array.isArray(rawData)) {
+          parsedData = rawData;
+
+          // Validate McpApiConfig format
+          if (parsedData.length > 0 && !parsedData.every(c => c.configName)) {
+            throw new Error("Invalid McpApiConfig array: Each object must have at least 'configName'.");
+          }
+        }
+        else {
+          throw new Error("Imported file must be either a standard MCP client configuration (with 'mcpServers' property) or an array of McpApiConfig objects.");
         }
 
         setApiConfigsJson(JSON.stringify(parsedData, null, 2));
-        addAuditLogEntry('MCP_API_CONFIGS_FILE_PREPARED', `Configurations from file ${file.name} loaded into editor.`);
-        alert(`Configurations from "${file.name}" loaded into the editor. Review and click "Save & Apply" to persist.`);
+        addAuditLogEntry('MCP_API_CONFIGS_FILE_PREPARED', `Configurations from file ${file.name} loaded into editor (${parsedData.length} configs).`);
+        alert(`Configurations from "${file.name}" loaded into the editor. ${Array.isArray(rawData) ? 'Direct format detected.' : 'Standard MCP format converted.'} Review and click "Save & Apply" to persist.`);
       } catch (err: any) {
         const errorMsg = `Error processing imported file "${file.name}": ${err.message}`;
         setImportedFileError(errorMsg);
@@ -210,6 +244,85 @@ const SettingsPage: React.FC = () => {
       setError(errorMsg);
       addAuditLogEntry('MCP_API_CONFIGS_FILE_READ_ERROR', errorMsg);
     }
+    reader.readAsText(file);
+    event.target.value = ''; // Reset file input
+  };
+
+  const handleLoadMcpConfig = async () => {
+    try {
+      setError(null);
+      const response = await fetch('http://localhost:10200/api/mcp-config', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (response.ok) {
+        const configData = await response.text();
+        setMcpConfigJson(configData);
+        addAuditLogEntry('MCP_CONFIG_LOADED', 'MCP configuration loaded from backend.');
+      } else {
+        throw new Error(`Failed to load MCP config: ${response.statusText}`);
+      }
+    } catch (error: any) {
+      const errorMsg = `Error loading MCP config: ${error.message}`;
+      setError(errorMsg);
+      addAuditLogEntry('MCP_CONFIG_LOAD_ERROR', errorMsg);
+    }
+  };
+
+  const handleSaveMcpConfig = async () => {
+    try {
+      setError(null);
+      // Validate JSON first
+      JSON.parse(mcpConfigJson);
+
+      const response = await fetch('http://localhost:10200/api/mcp-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: mcpConfigJson })
+      });
+
+      if (response.ok) {
+        addAuditLogEntry('MCP_CONFIG_SAVED', 'MCP configuration saved to backend.');
+        alert('MCP configuration saved successfully!');
+      } else {
+        throw new Error(`Failed to save MCP config: ${response.statusText}`);
+      }
+    } catch (error: any) {
+      const errorMsg = `Error saving MCP config: ${error.message}`;
+      setError(errorMsg);
+      addAuditLogEntry('MCP_CONFIG_SAVE_ERROR', errorMsg);
+    }
+  };
+
+  const handleImportMcpFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setImportedFileError(null);
+    setError(null);
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        // Validate it's valid JSON
+        JSON.parse(text);
+        setMcpConfigJson(text);
+        addAuditLogEntry('MCP_CONFIG_FILE_IMPORTED', `MCP configuration from file ${file.name} loaded into editor.`);
+        alert(`MCP configuration from "${file.name}" loaded into editor.`);
+      } catch (err: any) {
+        const errorMsg = `Error processing MCP file "${file.name}": ${err.message}`;
+        setImportedFileError(errorMsg);
+        setError(errorMsg);
+        addAuditLogEntry('MCP_CONFIG_FILE_IMPORT_ERROR', errorMsg);
+      }
+    };
+    reader.onerror = () => {
+      const errorMsg = `Error reading file "${file.name}".`;
+      setImportedFileError(errorMsg);
+      setError(errorMsg);
+      addAuditLogEntry('MCP_CONFIG_FILE_READ_ERROR', errorMsg);
+    };
     reader.readAsText(file);
     event.target.value = ''; // Reset file input
   };
@@ -332,50 +445,67 @@ const SettingsPage: React.FC = () => {
       </section>
 
        <section className="bg-surface p-6 rounded-lg shadow-modern-md dark:shadow-modern-md-dark border border-border">
-        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP API Connection Profiles</h3>
+        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP Configuration Editor</h3>
         <p className="text-xs text-textSecondary mb-2">
-          Define or import sets of API connection profiles. This application uses these to connect to MCP server APIs.
-          The structure should be an array of McpApiConfig objects.
+          Edit your MCP server configuration directly, similar to how Cursor handles it.
+          Supports standard MCP configuration format with mcpServers.
         </p>
 
-        <div className="my-4">
-            <label htmlFor="import-api-configs" className="block text-sm font-medium text-textSecondary">Import API Connection Profiles File</label>
+        <div className="my-4 flex gap-2">
+          <button
+            onClick={handleLoadMcpConfig}
+            className="bg-secondary text-white px-3 py-2 rounded-lg hover:bg-secondary-dark transition-colors text-sm"
+          >
+            Load Current MCP Config
+          </button>
+          <label className="bg-gray-200 dark:bg-gray-700 text-textPrimary px-3 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm cursor-pointer">
+            Import MCP File
             <input
-                type="file"
-                id="import-api-configs"
-                accept=".json"
-                onChange={handleImportApiConfigsFile}
-                className="mt-1 block w-full text-sm text-textSecondary file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-light file:text-primary hover:file:bg-primary-light/80 dark:file:bg-primary-dark dark:file:text-primary-light dark:hover:file:bg-primary-dark/80 cursor-pointer"
+              type="file"
+              accept=".json"
+              onChange={handleImportMcpFile}
+              className="hidden"
             />
-            {importedFileError && <p className="mt-1 text-xs text-red-500">{importedFileError}</p>}
+          </label>
+          <button
+            onClick={handleSaveMcpConfig}
+            className="bg-primary text-white px-3 py-2 rounded-lg hover:bg-primary-dark transition-colors text-sm"
+          >
+            Save MCP Config
+          </button>
         </div>
 
+        {importedFileError && <p className="mb-2 text-xs text-red-500">{importedFileError}</p>}
+
         <textarea
-            value={apiConfigsJson}
-            onChange={(e) => setApiConfigsJson(e.target.value)}
-            rows={10}
-            className="w-full p-2 font-mono text-xs bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-            placeholder={`[
-  {
-    "configName": "Default Local MCP Server",
-    "baseApiUrl": "http://localhost:8081/mcp-api",
-    "endpoints": {
-      "listDirectory": "/fs/list",
-      /* ... other endpoints ... */
-      "getServerStatus": "http://localhost:8081/status"
+            value={mcpConfigJson}
+            onChange={(e) => setMcpConfigJson(e.target.value)}
+            rows={15}
+            className="w-full p-3 font-mono text-xs bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
+            placeholder={`{
+  "mcpServers": {
+    "python-server": {
+      "command": "python",
+      "args": ["-m", "my_mcp_server"],
+      "type": "stdio",
+      "cwd": "/path/to/server",
+      "env": {
+        "LOG_LEVEL": "INFO"
+      }
     },
-    "requestTimeoutMs": 20000,
-    "expectedServerVersion": "0.1.0"
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@smithery/cli@latest", "run", "@smithery-ai/brave-search"],
+      "type": "stdio"
+    }
   }
-]`}
-            aria-label="MCP API Configurations JSON Editor"
+}`}
+            aria-label="MCP Configuration JSON Editor"
         />
-        <button
-            onClick={handleSaveApiConfigs}
-            className="mt-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors"
-        >
-            Save & Apply API Connection Configurations
-        </button>
+
+        <p className="mt-2 text-xs text-textSecondary">
+          This editor works with standard MCP configuration format. Changes are saved to the backend configuration file.
+        </p>
       </section>
 
       <section className="bg-surface p-6 rounded-lg shadow-modern-md dark:shadow-modern-md-dark border border-border">

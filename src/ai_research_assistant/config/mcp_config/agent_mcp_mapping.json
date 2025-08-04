@@ -34,18 +34,95 @@
       },
       "description": "Deep research agent for comprehensive topic analysis and investigation"
     },
-    "BrowserUseAgent": {
-      "required_servers": [],
-      "optional_servers": ["unified_local_server"],
+    "BrowserAgent": {
+      "required_servers": ["brave-search", "playwright"],
+      "optional_servers": ["toolbox"],
       "primary_tools": [
-        "mcp_unified_local_server_file_tree",
-        "mcp_unified_local_server_text_processing"
+        "mcp_brave-search_search",
+        "mcp_playwright_navigate",
+        "mcp_playwright_screenshot",
+        "mcp_playwright_click",
+        "mcp_playwright_fill",
+        "mcp_playwright_select",
+        "mcp_playwright_evaluate"
       ],
       "tool_preferences": {
-        "file_operations": "file_tree",
-        "content_analysis": "text_processing"
+        "web_search": "brave-search",
+        "browser_automation": "playwright"
       },
-      "description": "Browser automation agent with optional MCP tool integration"
+      "description": "Browser automation and web search agent"
+    },
+    "DatabaseAgent": {
+      "required_servers": ["chroma"],
+      "optional_servers": [],
+      "primary_tools": [
+        "mcp_chroma_list_collections",
+        "mcp_chroma_create_collection",
+        "mcp_chroma_peek_collection",
+        "mcp_chroma_get_collection_info",
+        "mcp_chroma_get_collection_count",
+        "mcp_chroma_modify_collection",
+        "mcp_chroma_delete_collection",
+        "mcp_chroma_add_documents",
+        "mcp_chroma_query_documents",
+        "mcp_chroma_get_documents",
+        "mcp_chroma_update_documents",
+        "mcp_chroma_delete_documents"
+      ],
+      "tool_preferences": {
+        "database_management": "chroma",
+        "document_intake": "chroma",
+        "document_sorting": "chroma",
+        "vector_operations": "chroma"
+      },
+      "description": "Database management agent responsible for document intake, sorting, and vector database operations"
+    },
+    "DocumentAgent": {
+      "required_servers": ["Rust", "Python"],
+      "optional_servers": [],
+      "primary_tools": [
+        "mcp_Rust_read_file",
+        "mcp_Rust_write_file",
+        "mcp_Rust_read_multiple_files",
+        "mcp_Python_read_file",
+        "mcp_Python_write_file"
+      ],
+      "tool_preferences": {
+        "file_reading": "Rust",
+        "file_writing": "Rust",
+        "document_creation": "Python"
+      },
+      "description": "Document agent focused on reading existing documents and creating new documents"
+    },
+    "LegalManagerAgent": {
+      "required_servers": [],
+      "optional_servers": ["unified_local_server"],
+      "primary_tools": [],
+      "tool_preferences": {
+        "coordination": "orchestrator",
+        "document_agent_communication": "a2a"
+      },
+      "description": "Legal manager agent that coordinates with Document Agent for legal document drafting and citation verification"
+    },
+    "OrchestratorAgent": {
+      "required_servers": [],
+      "optional_servers": ["unified_local_server"],
+      "primary_tools": [],
+      "tool_preferences": {
+        "agent_coordination": "a2a",
+        "workflow_management": "internal"
+      },
+      "description": "Orchestrator agent that coordinates between Browser, Database, and Legal agents"
+    },
+    "CEOAgent": {
+      "required_servers": [],
+      "optional_servers": [],
+      "primary_tools": [],
+      "tool_preferences": {
+        "user_interaction": "direct",
+        "orchestrator_delegation": "a2a"
+      },
+      "description": "CEO agent that interfaces with users and delegates to Orchestrator"
     },
     "CollectorAgent": {
       "required_servers": ["unified_local_server", "filesystem_server"],

@@ -1,45 +1,55 @@
 # src/ai_research_assistant/agents/data_query_coordinator/prompts.py
 
-# Prompts for the DataQueryCoordinator's internal Pydantic AI agent.
+# Prompts for the DatabaseAgent's internal Pydantic AI agent.
 
-PLAN_DATABASE_QUERIES_PROMPT = """
-Based on the user's query and the provided summaries from document intake and legal research,
-formulate a plan to query relevant databases (SQL, VectorDB, GraphDB).
-Specify the type of query (sql, vector, cypher), the target database/collection, and the query itself.
+ORGANIZE_DOCUMENTS_INTO_COLLECTIONS_PROMPT = """
+Based on the provided document metadata and content summaries, create a plan to organize
+documents into appropriate Chroma collections for optimal retrieval and management.
 
-User Query: {user_query_details}
+Current documents:
+{documents_summary}
 
-Document Intake Summary:
-{intake_summary_content_snippet}
+Consider creating collections based on:
+- Document type (legal briefs, medical records, contracts, etc.)
+- Date ranges for temporal organization
+- Subject matter or case association
+- Access patterns and query requirements
 
-Legal Research Summary:
-{research_summary_content_snippet}
-
-Respond with a JSON list of query instructions. Example:
-[
-  {{"type": "sql", "database_alias": "cases_db", "query": "SELECT * FROM decisions WHERE issue LIKE '%keyword%';"}},
-  {{"type": "vector", "collection_name": "case_embeddings", "query_text_for_embedding": "text to embed for similarity search", "top_k": 5}}
-]
+Respond with a JSON object containing:
+{{
+  "collections": [
+    {{
+      "name": "collection_name",
+      "description": "what this collection contains",
+      "document_criteria": "criteria for documents in this collection",
+      "embedding_function": "default",
+      "estimated_document_count": 0
+    }}
+  ],
+  "sorting_rules": [
+    {{
+      "source_collection": "unsorted",
+      "target_collection": "collection_name",
+      "filter_metadata": {{"key": "value"}}
+    }}
+  ]
+}}
 """
 
-SYNTHESIZE_REPORT_FROM_DATA_PROMPT = """
-You have received data from various sources: document intake summaries, legal research findings, and database query results.
-Synthesize this information into a coherent report that directly addresses the user's original query.
-The report should be clear, concise, and well-structured according to the requested format.
+OPTIMIZE_COLLECTION_PROMPT = """
+Analyze the current state of the Chroma collection and suggest optimization parameters.
 
-User's Original Query: {user_query_details}
-Requested Report Format: {report_format}
-Target Audience: {target_audience_str}
+Collection: {collection_name}
+Current document count: {document_count}
+Current metadata schema: {metadata_schema}
+Query patterns: {query_patterns}
 
-Document Intake Summary:
-{intake_summary_content}
+Suggest optimal HNSW parameters and any reorganization needed for better performance.
+Consider:
+- Search speed vs accuracy tradeoffs
+- Memory usage
+- Expected query load
+- Document similarity patterns
 
-Legal Research Findings:
-{research_summary_content}
-
-Database Query Results:
-{db_query_results_json_list}
-
-Generate the report content. If the format is markdown, use appropriate markdown syntax.
-If the format is json_summary, provide a structured JSON object summarizing the key information.
+Respond with optimization recommendations including specific HNSW parameter values.
 """

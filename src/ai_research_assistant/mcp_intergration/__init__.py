@@ -1,15 +1,18 @@
-# src/savagelysubtle_airesearchagent/mcp_integration/__init__.py
+"""
+MCP Integration Module
 
-from . import agent_registry
-from . import mcp_client_utils
-from . import server_main
-from . import shared_tools
+This module provides Model Context Protocol (MCP) integration for the AI Research Assistant.
+It manages MCP server connections and distributes tools to agents based on configuration.
+"""
+
+from .mcp_client_manager import (
+    MCPClientManager,
+    get_mcp_client_manager,
+    shutdown_mcp_client_manager,
+)
 
 __all__ = [
-    "agent_registry",
-    "mcp_client_utils",
-    "server_main",
-    "shared_tools",
+    "MCPClientManager",
+    "get_mcp_client_manager",
+    "shutdown_mcp_client_manager",
 ]
-
-# --- End of src/savagelysubtle_airesearchagent/mcp_integration/__init__.py ---

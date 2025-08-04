@@ -1,0 +1,29 @@
+---
+config:
+  layout: fixed
+  theme: mc
+---
+flowchart TD
+    n1["user"] <--> n2["CEO"]
+    n3["Orchestrator"] <--> n2 & n4["Browser Agent"]
+    n5["Legal Agent"] <--> n3 & n6["Document Agent"]
+    n4 <--> n7["MCP SERVER"]
+    n6 <--> n7
+    n8["Database Agent"] <--> n3 & n7
+    n9["Browser"] <--> n7
+    n10["Database"] <--> n7
+    n11["Files"] <--> n1
+    n7 <--> n11
+    n1 --> n10
+    n1@{ shape: rounded}
+    n2@{ shape: rounded}
+    n3@{ shape: rounded}
+    n4@{ shape: rounded}
+    n5@{ shape: rounded}
+    n6@{ shape: rounded}
+    n7@{ shape: rounded}
+    n8@{ shape: rounded}
+    n9@{ shape: rect}
+    n10@{ shape: rect}
+    n11@{ shape: rect}
+    style n7 color:#000000

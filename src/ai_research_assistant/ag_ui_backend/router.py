@@ -72,9 +72,7 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
                     user_message_to_process: Optional[AGUIMessage] = None
                     if run_input.messages:
                         # AG-UI messages are a list, latest is typically the user's new input
-                        latest_message_from_ui = AGUIMessage.model_validate(
-                            run_input.messages[-1]
-                        )  # Validate with discriminated union
+                        latest_message_from_ui = run_input.messages[-1]
                         if latest_message_from_ui.role == "user":
                             user_message_to_process = latest_message_from_ui
                             conversation_state.add_message(user_message_to_process)
@@ -109,8 +107,6 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
                             error_event = RunErrorEvent(
                                 type=EventType.RUN_ERROR,
                                 message="No user prompt provided.",
-                                thread_id=thread_id,
-                                run_id=run_id_for_operation,
                             )
                             await websocket.send_json(
                                 error_event.model_dump(by_alias=True, exclude_none=True)
@@ -179,8 +175,6 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
                     error_event = RunErrorEvent(
                         type=EventType.RUN_ERROR,
                         message="Unknown message structure",
-                        thread_id=thread_id,
-                        run_id=run_id_for_operation,
                     )
                     await websocket.send_json(
                         error_event.model_dump(by_alias=True, exclude_none=True)
@@ -194,8 +188,6 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
                 error_event = RunErrorEvent(
                     type=EventType.RUN_ERROR,
                     message=f"Invalid data format: {str(e)}",
-                    thread_id=thread_id,
-                    run_id=run_id_for_operation,
                 )
                 await websocket.send_json(
                     error_event.model_dump(by_alias=True, exclude_none=True)
@@ -207,8 +199,6 @@ async def websocket_endpoint(websocket: WebSocket, thread_id: str):
                 error_event = RunErrorEvent(
                     type=EventType.RUN_ERROR,
                     message=f"An internal error occurred: {str(e)}",
-                    thread_id=thread_id,
-                    run_id=run_id_for_operation,
                 )
                 await websocket.send_json(
                     error_event.model_dump(by_alias=True, exclude_none=True)
@@ -349,6 +339,16 @@ class MCPServerStatusResponse(BaseModel):
     allowed_directories: Optional[list[str]] = None
 
 
+class MCPConfigRequest(BaseModel):
+    config: str
+
+
+class MCPConfigResponse(BaseModel):
+    success: bool
+    message: str
+    config: Optional[str] = None
+
+
 @router.post("/api/mcp/write-file", response_model=MCPWriteFileResponse)
 async def mcp_write_file(request: MCPWriteFileRequest):
     """
@@ -442,6 +442,101 @@ async def mcp_get_server_status():
             version=None,
             error=f"Error getting server status: {str(e)}",
             allowed_directories=None,
+        )
+
+
+@router.get("/api/mcp-config", response_model=MCPConfigResponse)
+async def get_mcp_config():
+    """
+    Get the current MCP configuration file content.
+    """
+    try:
+        logger.info("Loading MCP configuration")
+
+        # Load the MCP configuration from the config file
+        from pathlib import Path
+
+        config_path = (
+            Path(__file__).parent.parent / "config" / "mcp_config" / "mcp_servers.json"
+        )
+
+        if config_path.exists():
+            with open(config_path, "r") as f:
+                config_content = f.read()
+
+            return MCPConfigResponse(
+                success=True,
+                message="MCP configuration loaded successfully",
+                config=config_content,
+            )
+        else:
+            # Return a default configuration template
+            default_config = {
+                "mcpServers": {
+                    "example-server": {
+                        "command": "python",
+                        "args": ["-m", "my_mcp_server"],
+                        "type": "stdio",
+                        "cwd": "/path/to/server",
+                        "env": {"LOG_LEVEL": "INFO"},
+                    }
+                }
+            }
+
+            return MCPConfigResponse(
+                success=True,
+                message="No existing config found, returning template",
+                config=json.dumps(default_config, indent=2),
+            )
+
+    except Exception as e:
+        logger.error(f"Error loading MCP config: {e}", exc_info=True)
+        return MCPConfigResponse(
+            success=False,
+            message=f"Error loading MCP configuration: {str(e)}",
+            config=None,
+        )
+
+
+@router.post("/api/mcp-config", response_model=MCPConfigResponse)
+async def save_mcp_config(request: MCPConfigRequest):
+    """
+    Save the MCP configuration file content.
+    """
+    try:
+        logger.info("Saving MCP configuration")
+
+        # Validate JSON format
+        config_data = json.loads(request.config)
+
+        # Save to the MCP configuration file
+        from pathlib import Path
+
+        config_path = (
+            Path(__file__).parent.parent / "config" / "mcp_config" / "mcp_servers.json"
+        )
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(config_path, "w") as f:
+            f.write(json.dumps(config_data, indent=2))
+
+        return MCPConfigResponse(
+            success=True,
+            message="MCP configuration saved successfully",
+            config=request.config,
+        )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in MCP config: {e}")
+        return MCPConfigResponse(
+            success=False, message=f"Invalid JSON format: {str(e)}", config=None
+        )
+    except Exception as e:
+        logger.error(f"Error saving MCP config: {e}", exc_info=True)
+        return MCPConfigResponse(
+            success=False,
+            message=f"Error saving MCP configuration: {str(e)}",
+            config=None,
         )
 
 

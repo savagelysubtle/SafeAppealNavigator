@@ -1,33 +1,16 @@
 # src/ai_research_assistant/agents/specialized_manager_agent/document_agent/agent.py
-import asyncio
-import io
 import json
 import logging
-import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pypdf
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from pydantic import Field
 from pydantic_ai.tools import Tool as PydanticAITool
 
 from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
-)
-from ai_research_assistant.config.global_settings import settings
-from ai_research_assistant.core.mcp_client import fetch_and_wrap_mcp_tools
-from ai_research_assistant.core.models import (
-    DocumentProcessingSummary,
-    DocumentSourceInfo,
-    ProcessAndStoreDocumentsInput,
-    ProcessedDocumentInfo,
-)
-
-from .prompts import (
-    EXTRACT_METADATA_FROM_TEXT_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,186 +21,291 @@ class DocumentAgentConfig(BasePydanticAgentConfig):
 
     agent_name: str = "DocumentAgent"
     agent_id: str = Field(default_factory=lambda: f"doc_agent_{uuid.uuid4()}")
-    default_artifact_storage_mcp_path: str = "/mcp/artifacts/"
-    default_text_splitter_chunk_size: int = 1500
-    default_text_splitter_chunk_overlap: int = 150
 
     pydantic_ai_system_prompt: str = (
-        "You are an expert at analyzing and extracting structured metadata from unstructured text. "
-        "Based on the provided text, you will identify key information as requested in the user prompt "
-        "and respond in JSON format."
+        "You are a Document Agent focused exclusively on reading existing documents "
+        "and creating new documents. Your responsibilities are:\n"
+        "1. Reading document content from files using read_file tools\n"
+        "2. Creating new documents by writing content to files using write_file tools\n"
+        "3. Reading multiple related documents when needed\n\n"
+        "You work closely with the Database Agent who handles document storage and retrieval "
+        "in the vector database. You only handle file I/O operations - reading and writing documents. "
+        "You do NOT manage databases, embeddings, or document organization."
     )
 
 
 class DocumentAgent(BasePydanticAgent):
     """
-    Coordinates the entire document intake pipeline: ingestion, OCR, metadata tagging,
-    chunking, and embedding for legal documents.
+    Document agent focused on reading existing documents and creating new documents.
+    Uses only file I/O tools (read_file, write_file, read_multiple_files).
     """
 
     def __init__(self, config: Optional[DocumentAgentConfig] = None):
         super().__init__(config=config or DocumentAgentConfig())
         self.agent_config: DocumentAgentConfig = self.config  # type: ignore
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=self.agent_config.default_text_splitter_chunk_size,
-            chunk_overlap=self.agent_config.default_text_splitter_chunk_overlap,
-            length_function=len,
+        logger.info(
+            f"DocumentAgent '{self.agent_name}' initialized with file I/O tools."
         )
-        logger.info(f"DocumentAgent '{self.agent_name}' initialized.")
 
     def _get_initial_tools(self) -> List[PydanticAITool]:
-        base_tools = super()._get_initial_tools()
-        try:
-            mcp_tools = asyncio.run(fetch_and_wrap_mcp_tools(settings.MCP_SERVER_URL))
-        except Exception as e:
-            logger.error(f"Failed to fetch MCP tools: {e}")
-            mcp_tools = []
-        logger.info(f"{self.agent_name} initialized with {len(mcp_tools)} MCP tools.")
-        return base_tools + mcp_tools
+        """Get MCP tools from parent class - will automatically get file I/O tools."""
+        return super()._get_initial_tools()
 
-    async def _read_document(
-        self, source_info: DocumentSourceInfo, ocr_enabled: bool
+    async def read_document(
+        self, file_path: str, extract_metadata: bool = False
     ) -> Dict[str, Any]:
-        """Reads a document from an MCP path and returns its content and type."""
-        logger.info(f"Reading document from: {source_info.mcp_path}")
+        """
+        Read a document from a file path.
+
+        Args:
+            file_path: Path to the document file
+            extract_metadata: Whether to extract metadata from the document
+
+        Returns:
+            Document content and optional metadata
+        """
+        logger.info(f"Reading document from: {file_path}")
+
         try:
-            read_result = await self.run_tool(
-                "read_mcp_file", mcp_path=source_info.mcp_path
+            # Use the appropriate read tool based on available MCP servers
+            result = await self.pydantic_agent.run(
+                user_prompt=f"Read the document at path: {file_path}"
             )
-            content_bytes = read_result.get("content")
-            if not content_bytes:
-                raise ValueError("MCP file read returned no content.")
-            file_type = (
-                source_info.document_type
-                or Path(source_info.original_filename or source_info.mcp_path).suffix
-            ).lower()
-            text_content = ""
-            if file_type == ".pdf":
-                reader = pypdf.PdfReader(io.BytesIO(content_bytes))
-                text_content = "".join(page.extract_text() for page in reader.pages)
-                if not text_content.strip() and ocr_enabled:
-                    logger.warning(
-                        "PDF appears to be image-based. OCR is a placeholder."
+
+            content = result.data if hasattr(result, "data") else str(result)
+
+            response: Dict[str, Any] = {
+                "status": "success",
+                "file_path": file_path,
+                "content": content,
+                "file_type": Path(file_path).suffix.lower(),
+            }
+
+            if extract_metadata:
+                # Extract basic metadata using LLM
+                metadata_result = await self.pydantic_agent.run(
+                    user_prompt=(
+                        f"Extract key metadata from this document content:\n\n{content[:2000]}\n\n"
+                        "Return as JSON with keys: title, author, date, document_type, summary"
                     )
-                    text_content = "[OCR Placeholder: This PDF requires OCR processing]"
-            else:
-                text_content = content_bytes.decode("utf-8", errors="ignore")
-            return {"text": text_content, "type": file_type, "error": None}
-        except Exception as e:
-            logger.error(f"Failed to read/process document {source_info.mcp_path}: {e}")
-            return {"text": None, "type": None, "error": str(e)}
+                )
+                try:
+                    metadata = json.loads(str(metadata_result.data))
+                    response["metadata"] = metadata
+                except:
+                    response["metadata"] = {"summary": str(metadata_result.data)}
 
-    async def _extract_metadata(self, text_snippet: str) -> Dict[str, Any]:
-        """Extracts metadata from text using an LLM call."""
+            return response
+
+        except Exception as e:
+            logger.error(f"Failed to read document {file_path}: {e}")
+            return {"status": "error", "file_path": file_path, "error": str(e)}
+
+    async def read_multiple_documents(
+        self, file_paths: List[str], extract_metadata: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Read multiple documents at once.
+
+        Args:
+            file_paths: List of document file paths
+            extract_metadata: Whether to extract metadata from each document
+
+        Returns:
+            List of document contents and metadata
+        """
+        logger.info(f"Reading {len(file_paths)} documents")
+
         try:
-            prompt = EXTRACT_METADATA_FROM_TEXT_PROMPT.format(
-                document_text_snippet=text_snippet
+            # Use read_multiple_files tool if available
+            result = await self.pydantic_agent.run(
+                user_prompt=f"Read multiple documents from these paths: {file_paths}"
             )
-            llm_result = await self.pydantic_agent.run(user_prompt=prompt)
-            return json.loads(llm_result.output)
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.error(
-                f"LLM metadata extraction/parsing failed: {e}. Raw output: {llm_result.output}"
-            )
-            return {"error": f"Failed to parse LLM metadata output: {e}"}
+
+            documents = []
+            # Process each document result
+            for i, file_path in enumerate(file_paths):
+                doc_data = {"file_path": file_path, "status": "success"}
+
+                # Extract content for this file from result
+                if hasattr(result, "data") and isinstance(result.data, list):
+                    doc_data["content"] = result.data[i] if i < len(result.data) else ""
+                else:
+                    doc_data["content"] = str(result)
+
+                if extract_metadata:
+                    # Simple metadata extraction
+                    doc_data["metadata"] = {
+                        "file_name": Path(file_path).name,
+                        "file_type": Path(file_path).suffix.lower(),
+                    }
+
+                documents.append(doc_data)
+
+            return documents
+
         except Exception as e:
-            logger.error(f"LLM metadata extraction failed: {e}")
-            return {"error": str(e)}
+            logger.error(f"Failed to read multiple documents: {e}")
+            # Return error for all documents
+            return [
+                {"status": "error", "file_path": fp, "error": str(e)}
+                for fp in file_paths
+            ]
 
-    async def _store_artifact(self, content: str, case_id: str, filename: str) -> str:
-        """Stores a text artifact using an MCP tool and returns its path."""
-        storage_path = self.agent_config.default_artifact_storage_mcp_path
-        mcp_path = f"{storage_path.rstrip('/')}/{case_id}/{filename}"
-        await self.run_tool("write_mcp_file", mcp_path=mcp_path, content=content)
-        return mcp_path
-
-    async def _chunk_and_embed(
-        self, text: str, collection_name: str, metadata: Dict[str, Any]
-    ) -> List[str]:
-        """Chunks text and stores embeddings in a vector DB via an MCP tool."""
-        chunks = self.text_splitter.split_text(text)
-        logger.info(f"Split text into {len(chunks)} chunks.")
-        result = await self.run_tool(
-            "add_texts_to_vector_db",
-            collection_name=collection_name,
-            texts=chunks,
-            metadatas=[metadata] * len(chunks),
-        )
-        chunk_ids = result.get("ids", [])
-        if not chunk_ids:
-            raise ValueError("Failed to get chunk IDs from vector DB.")
-        logger.info(f"Stored {len(chunk_ids)} chunks in vector DB.")
-        return chunk_ids
-
-    async def process_and_store_documents(
-        self, input_data: ProcessAndStoreDocumentsInput
+    async def create_document(
+        self,
+        file_path: str,
+        content: str,
+        document_type: str = "text",
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
-        Manages the full lifecycle of document intake, from raw files to indexed embeddings.
+        Create a new document by writing content to a file.
+
+        Args:
+            file_path: Path where the document should be created
+            content: Content to write to the document
+            document_type: Type of document (text, markdown, json, etc.)
+            metadata: Optional metadata to include in document header
+
+        Returns:
+            Result of document creation
         """
-        start_time = time.time()
-        logger.info(
-            f"Starting document processing for case '{input_data.case_id}' with {len(input_data.document_sources)} documents."
-        )
-        processed_docs_info: List[ProcessedDocumentInfo] = []
-        errors_summary: List[str] = []
-        for source_info in input_data.document_sources:
-            doc_id, process_status, error_msg = str(uuid.uuid4()), "success", None
-            text_mcp_path, meta_mcp_path, doc_type = "", "", ""
-            vdb_chunk_ids: List[str] = []
-            try:
-                read_output = await self._read_document(
-                    source_info, input_data.ocr_enabled
-                )
-                if read_output["error"]:
-                    raise Exception(f"Read error: {read_output['error']}")
-                doc_text, doc_type = read_output["text"], read_output["type"]
-                text_filename = f"{doc_id}_extracted_text.txt"
-                text_mcp_path = await self._store_artifact(
-                    doc_text, input_data.case_id, text_filename
-                )
-                metadata = await self._extract_metadata(doc_text[:4096])
-                if metadata.get("error"):
-                    raise Exception(f"Metadata extraction error: {metadata['error']}")
-                metadata["source_mcp_path"] = source_info.mcp_path
-                metadata["original_filename"] = source_info.original_filename
-                meta_filename = f"{doc_id}_metadata.json"
-                meta_mcp_path = await self._store_artifact(
-                    json.dumps(metadata, indent=2), input_data.case_id, meta_filename
-                )
-                vdb_chunk_ids = await self._chunk_and_embed(
-                    doc_text, input_data.target_vector_collection, metadata
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to process document {source_info.mcp_path}: {e}",
-                    exc_info=True,
-                )
-                process_status = "failed"
-                error_msg = str(e)
-                errors_summary.append(f"{source_info.mcp_path}: {error_msg}")
-            processed_docs_info.append(
-                ProcessedDocumentInfo(
-                    source_path=source_info.mcp_path,
-                    document_type=doc_type,
-                    text_artifact_mcp_path=text_mcp_path,
-                    metadata_artifact_mcp_path=meta_mcp_path,
-                    vector_db_chunk_ids=vdb_chunk_ids,
-                    status=process_status,
-                    error_message=error_msg,
+        logger.info(f"Creating {document_type} document at: {file_path}")
+
+        try:
+            # Add metadata header if provided and document type supports it
+            final_content = content
+            if metadata and document_type in ["markdown", "text"]:
+                if document_type == "markdown":
+                    # Add as YAML frontmatter
+                    import yaml
+
+                    frontmatter = yaml.dump(metadata, default_flow_style=False)
+                    final_content = f"---\n{frontmatter}---\n\n{content}"
+                else:
+                    # Add as comment header
+                    header_lines = [f"# {k}: {v}" for k, v in metadata.items()]
+                    final_content = "\n".join(header_lines) + "\n\n" + content
+
+            # Write document using write_file tool
+            result = await self.pydantic_agent.run(
+                user_prompt=f"Write the following content to file at {file_path}:\n\n{final_content}"
+            )
+
+            return {
+                "status": "success",
+                "file_path": file_path,
+                "document_type": document_type,
+                "size": len(final_content),
+                "message": f"Successfully created {document_type} document",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to create document at {file_path}: {e}")
+            return {"status": "error", "file_path": file_path, "error": str(e)}
+
+    async def create_report_from_template(
+        self, template_path: str, output_path: str, template_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a report by reading a template and filling it with data.
+
+        Args:
+            template_path: Path to the template file
+            output_path: Path where the report should be saved
+            template_data: Data to fill into the template
+
+        Returns:
+            Result of report creation
+        """
+        logger.info(f"Creating report from template: {template_path}")
+
+        try:
+            # Read template
+            template_result = await self.read_document(template_path)
+            if template_result["status"] != "success":
+                return template_result
+
+            template_content = template_result["content"]
+
+            # Fill template with data using LLM
+            filled_result = await self.pydantic_agent.run(
+                user_prompt=(
+                    f"Fill this template with the provided data.\n\n"
+                    f"Template:\n{template_content}\n\n"
+                    f"Data:\n{json.dumps(template_data, indent=2)}\n\n"
+                    f"Replace all placeholders with appropriate data values."
                 )
             )
-        end_time = time.time()
-        successful_count = sum(1 for d in processed_docs_info if d.status == "success")
-        failed_count = len(processed_docs_info) - successful_count
-        summary = DocumentProcessingSummary(
-            case_id=input_data.case_id,
-            processed_documents=processed_docs_info,
-            overall_status="CompletedWithErrors" if failed_count > 0 else "Completed",
-            total_documents_input=len(input_data.document_sources),
-            total_documents_processed_successfully=successful_count,
-            total_documents_failed=failed_count,
-            errors_summary=errors_summary,
-            processing_time_seconds=end_time - start_time,
-        )
-        return summary.model_dump(exclude_none=True)
+
+            filled_content = (
+                filled_result.data
+                if hasattr(filled_result, "data")
+                else str(filled_result)
+            )
+
+            # Create the report
+            return await self.create_document(
+                file_path=output_path,
+                content=filled_content,
+                document_type="report",
+                metadata={
+                    "template": template_path,
+                    "created_from": "template",
+                    **template_data.get("metadata", {}),
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to create report from template: {e}")
+            return {
+                "status": "error",
+                "template_path": template_path,
+                "output_path": output_path,
+                "error": str(e),
+            }
+
+    async def append_to_document(
+        self, file_path: str, content_to_append: str, separator: str = "\n\n"
+    ) -> Dict[str, Any]:
+        """
+        Append content to an existing document.
+
+        Args:
+            file_path: Path to the document
+            content_to_append: Content to add to the document
+            separator: Separator between existing and new content
+
+        Returns:
+            Result of append operation
+        """
+        logger.info(f"Appending content to document: {file_path}")
+
+        try:
+            # Read existing content
+            existing_result = await self.read_document(file_path)
+            if existing_result["status"] != "success":
+                # If file doesn't exist, create it
+                return await self.create_document(file_path, content_to_append)
+
+            # Combine content
+            existing_content = existing_result["content"]
+            new_content = existing_content + separator + content_to_append
+
+            # Write back
+            result = await self.pydantic_agent.run(
+                user_prompt=f"Write the following updated content to file at {file_path}:\n\n{new_content}"
+            )
+
+            return {
+                "status": "success",
+                "file_path": file_path,
+                "content_appended": len(content_to_append),
+                "total_size": len(new_content),
+                "message": "Successfully appended content to document",
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to append to document {file_path}: {e}")
+            return {"status": "error", "file_path": file_path, "error": str(e)}

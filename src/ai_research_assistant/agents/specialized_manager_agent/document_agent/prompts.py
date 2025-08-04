@@ -1,26 +1,60 @@
 # src/ai_research_assistant/agents/document_processing_coordinator/prompts.py
 
-# Prompts for the DocumentProcessingCoordinator's internal Pydantic AI agent,
-# if it uses LLM for tasks like metadata tagging or summarization during processing.
+# Prompts for the DocumentAgent's internal Pydantic AI agent.
 
-EXTRACT_METADATA_FROM_TEXT_PROMPT = """
-Given the following document text, extract key metadata.
-Focus on identifying: Title, Author(s), Publication Date, Document Type (e.g., legal brief, medical report, contract), Key Entities (people, organizations, locations mentioned), and a brief 1-2 sentence summary.
+EXTRACT_DOCUMENT_STRUCTURE_PROMPT = """
+Analyze the following document and extract its structure and key components.
+Focus on identifying the document's organization, main sections, and overall format.
 
 Document Text:
 {document_text_snippet}
 
-Respond in JSON format with the following keys: "title", "authors", "publication_date", "document_type", "key_entities", "summary".
-If a piece of metadata is not found, use null or an empty list as appropriate.
+Respond in JSON format with the following structure:
+{{
+  "document_type": "type of document (report, memo, brief, etc.)",
+  "structure": {{
+    "sections": ["list", "of", "main", "sections"],
+    "has_table_of_contents": true/false,
+    "has_executive_summary": true/false,
+    "has_citations": true/false,
+    "has_appendices": true/false
+  }},
+  "metadata": {{
+    "title": "document title if found",
+    "author": "author if found",
+    "date": "date if found",
+    "page_count": "estimated page count"
+  }},
+  "summary": "brief 2-3 sentence summary of the document"
+}}
 """
 
-OCR_CORRECTION_PROMPT = """
-The following text was extracted via OCR and may contain errors.
-Please review and correct common OCR mistakes, improve formatting, and ensure readability.
-Pay attention to broken words, misrecognized characters, and inconsistent spacing.
+CREATE_DOCUMENT_FROM_OUTLINE_PROMPT = """
+Create a professional document based on the following outline and requirements.
 
-OCR Text:
-{ocr_text}
+Document Type: {document_type}
+Title: {title}
+Outline:
+{outline}
 
-Return the corrected text.
+Additional Requirements:
+{requirements}
+
+Generate a complete, well-formatted document following the provided outline.
+Include appropriate headings, transitions between sections, and professional language.
+Ensure the document flows logically and addresses all points in the outline.
+"""
+
+MERGE_DOCUMENTS_PROMPT = """
+Merge the following document contents into a single, cohesive document.
+Maintain logical flow and eliminate redundancy while preserving all unique information.
+
+Documents to merge:
+{documents_to_merge}
+
+Target document type: {target_type}
+Special instructions: {merge_instructions}
+
+Create a unified document that combines all relevant information from the source documents.
+Ensure smooth transitions between merged sections and maintain consistent formatting and tone.
 """

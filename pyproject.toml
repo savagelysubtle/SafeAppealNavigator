@@ -21,6 +21,7 @@ dependencies = [
     "langchain-mistralai==0.2.4",
     "langgraph==0.3.34",
     "maincontentextractor==0.0.4",
+    "mcp>=0.1.0",
     "nest-asyncio>=1.6.0",
     "opencv-python>=4.11.0.86",
     "pillow>=11.2.1",

@@ -105,14 +105,29 @@ class BasePydanticAgent:
     def _get_initial_tools(self) -> List[PydanticAITool]:
         """
         Provides a list of initial PydanticAITool instances.
-        Derived agents should override this to add their specific tools,
-        often by wrapping MCP client functionalities.
-
-        Example:
-        mcp_tools = self._create_mcp_tools()
-        return mcp_tools + other_specific_tools
+        Fetches MCP tools from the MCP client manager based on agent type.
+        Derived agents can override this to add their specific tools.
         """
-        return []
+        mcp_tools = []
+
+        try:
+            # Import here to avoid circular imports
+            from ai_research_assistant.mcp_intergration import get_mcp_client_manager
+
+            # Get MCP tools for this agent synchronously
+            # We'll use asyncio.run to call the async function
+            async def fetch_tools():
+                mcp_manager = await get_mcp_client_manager()
+                return mcp_manager.get_tools_for_agent(self.agent_name)
+
+            mcp_tools = asyncio.run(fetch_tools())
+            logger.info(f"Fetched {len(mcp_tools)} MCP tools for {self.agent_name}")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch MCP tools for {self.agent_name}: {e}")
+            # Continue without MCP tools if there's an error
+
+        return mcp_tools
 
     # Example of how tools wrapping MCP client could be created
     # This would live in a more specific place or be called by _get_initial_tools
@@ -170,6 +185,9 @@ class BasePydanticAgent:
         """
         Explicitly finds and runs a tool by name with the given arguments.
 
+        Note: This is a simplified implementation. For proper tool execution
+        with context, use self.pydantic_agent.run() with appropriate prompts.
+
         Args:
             tool_name: The name of the tool to run.
             **kwargs: The arguments to pass to the tool's function.
@@ -190,22 +208,19 @@ class BasePydanticAgent:
             )
             raise ValueError(f"Tool '{tool_name}' not found.")
 
-        # The `pydantic_ai.Tool`'s `run` method expects a `ToolCallPart` message and a context.
-        # We are bypassing the full LLM conversation flow here for direct execution,
-        # so we will call the underlying function directly.
-        # This assumes the tool's function can be called with the provided kwargs.
+        # For direct tool execution, we would need to create a proper RunContext
+        # For now, we recommend using self.pydantic_agent.run() for tool execution
+        logger.warning(
+            f"Direct tool execution for '{tool_name}' is not fully implemented. "
+            "Use self.pydantic_agent.run() with appropriate prompts for proper tool execution."
+        )
 
-        # The actual function to call is stored in `tool_to_run.function`
-        func = tool_to_run.function
-
-        # Pydantic AI tools can be async or sync. We need to handle both.
-        if asyncio.iscoroutinefunction(func):
-            return await func(**kwargs)
-        else:
-            # For sync functions, we can run them in a thread pool to avoid blocking
-            # the async event loop, though for many tools this might be overkill.
-            # For simplicity here, we call it directly.
-            return func(**kwargs)
+        # Return a placeholder response
+        return {
+            "warning": "Direct tool execution not implemented",
+            "tool_name": tool_name,
+            "suggestion": "Use pydantic_agent.run() for proper tool execution with context",
+        }
 
     async def health_check(self) -> dict:
         """
