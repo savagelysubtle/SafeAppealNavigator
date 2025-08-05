@@ -9,7 +9,8 @@ import TagExplorerPage from './components/pages/TagExplorerPage';
 import ChatAgentPanelPage from './components/pages/ChatAgentPanelPage';
 import SearchPage from './components/pages/SearchPage';
 import ExportCenterPage from './components/pages/ExportCenterPage';
-import SettingsPage from './components/pages/SettingsPage';
+import Settings from './components/pages/Settings';
+import SettingsPage from './components/pages/SettingsPage'; // Add import for old settings page
 import { useAppContext } from './contexts/AppContext';
 
 // New Page Imports
@@ -107,7 +108,8 @@ const App: React.FC = () => {
           <Route path="chat" element={<ChatAgentPanelPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="export" element={<ExportCenterPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="settings-legacy" element={<SettingsPage />} /> {/* Legacy settings page for comparison */}
 
           {/* WCAT & Policy Routes */}
           <Route path="wcat-search" element={<WcatSearchPage />} />

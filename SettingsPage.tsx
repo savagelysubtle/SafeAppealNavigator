@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { useAppContext } from '../../contexts/AppContext';
-import { Theme, AuditLogEntry, McpServerStatus, McpApiConfig } from '../../types';
-import ToggleSwitch from '../ui/ToggleSwitch';
+import { useAppContext } from './frontend/contexts/AppContext';
+import { Theme, AuditLogEntry, McpServerStatus } from './frontend/types';
+import ToggleSwitch from './frontend/components/ui/ToggleSwitch';
 // Remove direct geminiService import - use AG-UI backend instead
-import LoadingSpinner from '../ui/LoadingSpinner';
-import { getMCPServerStatus } from '../../contexts/AppContextHelper';
+import LoadingSpinner from './frontend/components/ui/LoadingSpinner';
+import { getMCPServerStatus } from './frontend/contexts/AppContextHelper';
 
 const SettingsPage: React.FC = () => {
   const {
     theme, toggleTheme, auditLog, addAuditLogEntry,
     mcpServerStatus: contextMcpStatus, setMcpServerStatus,
     apiKey: currentApiKey, setApiKey: setContextApiKey,
-    setError, // mcpClient and isMcpClientLoading removed - using backend API
-    mcpApiConfigs, activeApiConfigName,
-    setActiveApiConfig, updateMcpApiConfigs
+    setError
   } = useAppContext();
 
   const [newAllowedDir, setNewAllowedDir] = useState('');
@@ -21,9 +19,6 @@ const SettingsPage: React.FC = () => {
   const [isTestingApiKey, setIsTestingApiKey] = useState(false);
   const [apiKeyTestResult, setApiKeyTestResult] = useState<string | null>(null);
   const [currentMcpStatus, setCurrentMcpStatus] = useState<McpServerStatus>(contextMcpStatus);
-
-  const [apiConfigsJson, setApiConfigsJson] = useState<string>('');
-  const [selectedActiveConfigInDropdown, setSelectedActiveConfigInDropdown] = useState<string>(activeApiConfigName || '');
   const [importedFileError, setImportedFileError] = useState<string | null>(null);
   const [mcpConfigJson, setMcpConfigJson] = useState<string>('');
 
@@ -31,11 +26,10 @@ const SettingsPage: React.FC = () => {
     setCurrentMcpStatus(contextMcpStatus);
   }, [contextMcpStatus]);
 
+  // Load MCP config on component mount
   useEffect(() => {
-    setApiConfigsJson(JSON.stringify(mcpApiConfigs, null, 2));
-    setSelectedActiveConfigInDropdown(activeApiConfigName || (mcpApiConfigs.length > 0 ? mcpApiConfigs[0].configName : ''));
-  }, [mcpApiConfigs, activeApiConfigName]);
-
+    handleLoadMcpConfig();
+  }, []);
 
   const fetchMcpStatus = async () => {
     try {
@@ -62,7 +56,6 @@ const SettingsPage: React.FC = () => {
     fetchMcpStatus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array - only run on mount
-
 
   const handleAddDirectory = async () => {
     if (newAllowedDir.trim() === '') {
@@ -122,132 +115,6 @@ const SettingsPage: React.FC = () => {
     setIsTestingApiKey(false);
   };
 
-  const handleSaveApiConfigs = async () => {
-    setError(null);
-    setImportedFileError(null);
-    try {
-      const parsedConfigs: McpApiConfig[] = JSON.parse(apiConfigsJson);
-      if (!Array.isArray(parsedConfigs) || !parsedConfigs.every(c => c.configName && c.baseApiUrl && c.endpoints)) {
-        throw new Error("Invalid JSON structure. Ensure it's an array of McpApiConfig objects, each with configName, baseApiUrl, and endpoints.");
-      }
-
-      updateMcpApiConfigs(parsedConfigs); // Update the list in context first
-
-      let configNameToActivate: string | null = null;
-      if (parsedConfigs.length > 0) {
-        // Try to keep current selection if valid, otherwise pick first
-        const currentSelectionIsValid = parsedConfigs.find(c => c.configName === selectedActiveConfigInDropdown);
-        if (currentSelectionIsValid) {
-          configNameToActivate = selectedActiveConfigInDropdown;
-        } else {
-          configNameToActivate = parsedConfigs[0].configName;
-        }
-      }
-      // If parsedConfigs.length is 0, configNameToActivate remains null
-
-      await setActiveApiConfig(configNameToActivate); // This will handle null correctly
-
-      // Sync local dropdown state with what was actually activated
-      setSelectedActiveConfigInDropdown(configNameToActivate || '');
-
-      if (configNameToActivate) {
-        // alert("API Configurations saved and applied!"); // Optional: replace with a more subtle notification
-        addAuditLogEntry('MCP_API_CONFIGS_SAVED_UI', `${parsedConfigs.length} API configurations saved. Active: ${configNameToActivate}.`);
-      } else {
-        setError("API Configurations saved, but no configurations are available to make active.");
-        addAuditLogEntry('MCP_API_CONFIGS_SAVED_UI_EMPTY', 'API configurations saved (empty list). Active config cleared.');
-      }
-
-    } catch (e: any) {
-      const errorMsg = `Error saving API configurations: ${e.message}. Please ensure it's valid JSON.`;
-      setError(errorMsg);
-      addAuditLogEntry('MCP_API_CONFIGS_SAVE_ERROR_UI', errorMsg);
-    }
-  };
-
-  const handleActiveApiConfigChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newActiveName = e.target.value;
-    setSelectedActiveConfigInDropdown(newActiveName); // Update local state for dropdown
-    if (newActiveName) { // Only call setActiveApiConfig if a valid name is selected
-        await setActiveApiConfig(newActiveName);
-    } else { // If dropdown selection becomes empty (e.g. "No API configurations loaded")
-        await setActiveApiConfig(null);
-    }
-  };
-
-  const handleImportApiConfigsFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setImportedFileError(null);
-    setError(null);
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string;
-        const rawData = JSON.parse(text);
-        let parsedData: McpApiConfig[] = [];
-
-        // Check if it's a standard MCP client configuration
-        if (rawData.mcpServers && typeof rawData.mcpServers === 'object') {
-          // Convert standard MCP configuration to McpApiConfig format
-          parsedData = Object.entries(rawData.mcpServers).map(([serverName, serverConfig]: [string, any]) => {
-            const config: McpApiConfig = {
-              configName: serverName,
-              transportType: serverConfig.type === 'stdio' ? 'stdio' : 'http'
-            };
-
-            if (serverConfig.type === 'stdio') {
-              config.stdioOptions = {
-                command: serverConfig.command,
-                args: serverConfig.args || [],
-                cwd: serverConfig.cwd,
-                env: serverConfig.env
-              };
-            } else {
-              // For HTTP or other types, try to infer baseApiUrl
-              config.baseApiUrl = serverConfig.baseApiUrl || `http://localhost:8080`;
-              config.endpoints = serverConfig.endpoints || {};
-            }
-
-            return config;
-          });
-
-          addAuditLogEntry('MCP_STANDARD_CONFIG_CONVERTED', `Converted standard MCP configuration with ${parsedData.length} servers.`);
-        }
-        // Check if it's already in McpApiConfig array format
-        else if (Array.isArray(rawData)) {
-          parsedData = rawData;
-
-          // Validate McpApiConfig format
-          if (parsedData.length > 0 && !parsedData.every(c => c.configName)) {
-            throw new Error("Invalid McpApiConfig array: Each object must have at least 'configName'.");
-          }
-        }
-        else {
-          throw new Error("Imported file must be either a standard MCP client configuration (with 'mcpServers' property) or an array of McpApiConfig objects.");
-        }
-
-        setApiConfigsJson(JSON.stringify(parsedData, null, 2));
-        addAuditLogEntry('MCP_API_CONFIGS_FILE_PREPARED', `Configurations from file ${file.name} loaded into editor (${parsedData.length} configs).`);
-        alert(`Configurations from "${file.name}" loaded into the editor. ${Array.isArray(rawData) ? 'Direct format detected.' : 'Standard MCP format converted.'} Review and click "Save & Apply" to persist.`);
-      } catch (err: any) {
-        const errorMsg = `Error processing imported file "${file.name}": ${err.message}`;
-        setImportedFileError(errorMsg);
-        setError(errorMsg); // Also show in global error display
-        addAuditLogEntry('MCP_API_CONFIGS_FILE_IMPORT_ERROR', errorMsg);
-      }
-    };
-    reader.onerror = () => {
-      const errorMsg = `Error reading file "${file.name}".`;
-      setImportedFileError(errorMsg);
-      setError(errorMsg);
-      addAuditLogEntry('MCP_API_CONFIGS_FILE_READ_ERROR', errorMsg);
-    }
-    reader.readAsText(file);
-    event.target.value = ''; // Reset file input
-  };
-
   const handleLoadMcpConfig = async () => {
     try {
       setError(null);
@@ -259,7 +126,7 @@ const SettingsPage: React.FC = () => {
       if (response.ok) {
         const configData = await response.text();
         setMcpConfigJson(configData);
-        addAuditLogEntry('MCP_CONFIG_LOADED', 'MCP configuration loaded from backend.');
+        addAuditLogEntry('MCP_CONFIG_LOADED', 'MCP configuration loaded from data/mcp.json.');
       } else {
         throw new Error(`Failed to load MCP config: ${response.statusText}`);
       }
@@ -283,7 +150,7 @@ const SettingsPage: React.FC = () => {
       });
 
       if (response.ok) {
-        addAuditLogEntry('MCP_CONFIG_SAVED', 'MCP configuration saved to backend.');
+        addAuditLogEntry('MCP_CONFIG_SAVED', 'MCP configuration saved to data/mcp.json.');
         alert('MCP configuration saved successfully!');
       } else {
         throw new Error(`Failed to save MCP config: ${response.statusText}`);
@@ -309,7 +176,7 @@ const SettingsPage: React.FC = () => {
         JSON.parse(text);
         setMcpConfigJson(text);
         addAuditLogEntry('MCP_CONFIG_FILE_IMPORTED', `MCP configuration from file ${file.name} loaded into editor.`);
-        alert(`MCP configuration from "${file.name}" loaded into editor.`);
+        alert(`MCP configuration from "${file.name}" loaded into editor. Click "Save Configuration" to write to data/mcp.json.`);
       } catch (err: any) {
         const errorMsg = `Error processing MCP file "${file.name}": ${err.message}`;
         setImportedFileError(errorMsg);
@@ -326,8 +193,6 @@ const SettingsPage: React.FC = () => {
     reader.readAsText(file);
     event.target.value = ''; // Reset file input
   };
-
-  const activeConfigDetails = mcpApiConfigs.find(c => c.configName === activeApiConfigName);
 
   return (
     <div className="p-6 space-y-8 max-w-4xl mx-auto">
@@ -381,38 +246,14 @@ const SettingsPage: React.FC = () => {
       </section>
 
       <section className="bg-surface p-6 rounded-lg shadow-modern-md dark:shadow-modern-md-dark border border-border">
-        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP Server Connection & Status</h3>
+        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP Server Status</h3>
 
-        <div className="mb-4">
-            <label htmlFor="active-api-config" className="block text-sm font-medium text-textSecondary">Active API Connection Profile</label>
-            <select
-                id="active-api-config"
-                value={selectedActiveConfigInDropdown}
-                onChange={handleActiveApiConfigChange}
-                disabled={mcpApiConfigs.length === 0}
-                className="mt-1 block w-full px-3 py-2 bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-            >
-                {mcpApiConfigs.length === 0 && <option value="">No API configurations loaded</option>}
-                {mcpApiConfigs.map(conf => (
-                    <option key={conf.configName} value={conf.configName}>{conf.configName}</option>
-                ))}
-            </select>
-        </div>
-
-        <h4 className="text-lg font-medium text-textPrimary mt-4 mb-1">Server Status (using "{selectedActiveConfigInDropdown || 'N/A'}")</h4>
-        {/* MCP client loading status removed - status comes from backend API */}
         <div className="text-sm space-y-1 text-textSecondary">
           <p>Status: {currentMcpStatus.isRunning ?
             <span className="text-green-500 font-semibold">Running</span> :
             <span className="text-red-500 font-semibold">Not Running {currentMcpStatus.error ? `(${currentMcpStatus.error.substring(0,150)}${currentMcpStatus.error.length > 150 ? '...' : ''})` : ''}</span>}
           </p>
-          {currentMcpStatus.isRunning && <p>Reported Server Version: {currentMcpStatus.version || 'N/A'}</p>}
-          {activeConfigDetails && (
-            <>
-              <p>Expected Server Version: {activeConfigDetails.expectedServerVersion || 'Any'}</p>
-              <p>Request Timeout: {activeConfigDetails.requestTimeoutMs ? `${activeConfigDetails.requestTimeoutMs} ms` : 'Default (Browser)'}</p>
-            </>
-          )}
+          {currentMcpStatus.isRunning && <p>Server Version: {currentMcpStatus.version || 'N/A'}</p>}
           <p className="font-medium mt-2 text-textPrimary">Allowed Directories (from server):</p>
           {currentMcpStatus.allowedDirectories && currentMcpStatus.allowedDirectories.length > 0 ? (
             <ul className="list-disc list-inside pl-4">
@@ -423,7 +264,7 @@ const SettingsPage: React.FC = () => {
         <button onClick={fetchMcpStatus} className="mt-2 text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Refresh MCP Status</button>
 
         <div className="mt-4">
-          <label htmlFor="new-dir" className="block text-sm font-medium text-textSecondary">Add Allowed Directory (via active MCP connection)</label>
+          <label htmlFor="new-dir" className="block text-sm font-medium text-textSecondary">Add Allowed Directory</label>
           <div className="flex gap-2 mt-1">
             <input
               type="text"
@@ -445,19 +286,12 @@ const SettingsPage: React.FC = () => {
       </section>
 
        <section className="bg-surface p-6 rounded-lg shadow-modern-md dark:shadow-modern-md-dark border border-border">
-        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP Configuration Editor</h3>
+        <h3 className="text-xl font-semibold text-textPrimary mb-2">MCP Configuration</h3>
         <p className="text-xs text-textSecondary mb-2">
-          Edit your MCP server configuration directly, similar to how Cursor handles it.
-          Supports standard MCP configuration format with mcpServers.
+          Edit your MCP server configuration (data/mcp.json). Changes are automatically saved to the backend.
         </p>
 
         <div className="my-4 flex gap-2">
-          <button
-            onClick={handleLoadMcpConfig}
-            className="bg-secondary text-white px-3 py-2 rounded-lg hover:bg-secondary-dark transition-colors text-sm"
-          >
-            Load Current MCP Config
-          </button>
           <label className="bg-gray-200 dark:bg-gray-700 text-textPrimary px-3 py-2 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm cursor-pointer">
             Import MCP File
             <input
@@ -471,7 +305,7 @@ const SettingsPage: React.FC = () => {
             onClick={handleSaveMcpConfig}
             className="bg-primary text-white px-3 py-2 rounded-lg hover:bg-primary-dark transition-colors text-sm"
           >
-            Save MCP Config
+            Save Configuration
           </button>
         </div>
 
@@ -480,7 +314,7 @@ const SettingsPage: React.FC = () => {
         <textarea
             value={mcpConfigJson}
             onChange={(e) => setMcpConfigJson(e.target.value)}
-            rows={15}
+            rows={20}
             className="w-full p-3 font-mono text-xs bg-background border border-border rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
             placeholder={`{
   "mcpServers": {
@@ -493,9 +327,9 @@ const SettingsPage: React.FC = () => {
         "LOG_LEVEL": "INFO"
       }
     },
-    "brave-search": {
-      "command": "npx",
-      "args": ["-y", "@smithery/cli@latest", "run", "@smithery-ai/brave-search"],
+    "chroma": {
+      "command": "uvx",
+      "args": ["chroma-mcp", "--client-type", "persistent"],
       "type": "stdio"
     }
   }
@@ -504,7 +338,7 @@ const SettingsPage: React.FC = () => {
         />
 
         <p className="mt-2 text-xs text-textSecondary">
-          This editor works with standard MCP configuration format. Changes are saved to the backend configuration file.
+          This configuration is stored in data/mcp.json and used by your AI agents for tool access.
         </p>
       </section>
 

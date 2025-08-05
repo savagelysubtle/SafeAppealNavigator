@@ -1,205 +1,65 @@
-This project builds upon the foundation of the [browser-use](https://github.com/browser-use/browser-use), which is designed to make websites accessible for AI agents.
+# ⚖️ SafeAppealNavigator
 
-We would like to officially thank [WarmShao](https://github.com/warmshao) for his contribution to this project.
+*Support this project: [paypal.me/safeappealnavigator](https://paypal.me/safeappealnavigator)*
 
-**WebUI:** is built on Gradio and supports most of `browser-use` functionalities. This UI is designed to be user-friendly and enables easy interaction with the browser agent.
-
-**Expanded LLM Support:** We've integrated support for various Large Language Models (LLMs), including: Google, OpenAI, Azure OpenAI, Anthropic, DeepSeek, Ollama etc. And we plan to add support for even more models in the future.
-
-**Custom Browser Support:** You can use your own browser with our tool, eliminating the need to re-login to sites or deal with other authentication challenges. This feature also supports high-definition screen recording.
-
-**Persistent Browser Sessions:** You can choose to keep the browser window open between AI tasks, allowing you to see the complete history and state of AI interactions.
-
-
-
-## Installation Guide
-
-### Option 1: Local Installation
-
-Read the [quickstart guide](https://docs.browser-use.com/quickstart#prepare-the-environment) or follow the steps below to get started.
-
-#### Step 1: Clone the Repository
-```bash
-git clone https://github.com/browser-use/web-ui.git
-cd web-ui
-```
-
-#### Step 2: Set Up Python Environment
-We recommend using [uv](https://docs.astral.sh/uv/) for managing the Python environment.
-
-Using uv (recommended):
-```bash
-uv venv --python 3.11
-```
-
-Activate the virtual environment:
-- Windows (Command Prompt):
-```cmd
-.venv\Scripts\activate
-```
-- Windows (PowerShell):
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-- macOS/Linux:
-```bash
-source .venv/bin/activate
-```
-
-#### Step 3: Install Dependencies
-Install Python packages:
-```bash
-uv pip install -r requirements.txt
-```
-
-Install Browsers in playwright.
-```bash
-playwright install --with-deps
-```
-Or you can install specific browsers by running:
-```bash
-playwright install chromium --with-deps
-```
-
-#### Step 4: Configure Environment
-1. Create a copy of the example environment file:
-- Windows (Command Prompt):
-```bash
-copy .env.example .env
-```
-- macOS/Linux/Windows (PowerShell):
-```bash
-cp .env.example .env
-```
-2. Open `.env` in your preferred text editor and add your API keys and other settings
-
-#### Step 5: Enjoy the web-ui
-1.  **Run the WebUI:**
-    ```bash
-    python webui.py --ip 127.0.0.1 --port 7788
-    ```
-2. **Access the WebUI:** Open your web browser and navigate to `http://127.0.0.1:7788`.
-3. **Using Your Own Browser(Optional):**
-    - Set `BROWSER_PATH` to the executable path of your browser and `BROWSER_USER_DATA` to the user data directory of your browser. Leave `BROWSER_USER_DATA` empty if you want to use local user data.
-      - Windows
-        ```env
-         BROWSER_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
-         BROWSER_USER_DATA="C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
-        ```
-        > Note: Replace `YourUsername` with your actual Windows username for Windows systems.
-      - Mac
-        ```env
-         BROWSER_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-         BROWSER_USER_DATA="/Users/YourUsername/Library/Application Support/Google/Chrome"
-        ```
-    - Close all Chrome windows
-    - Open the WebUI in a non-Chrome browser, such as Firefox or Edge. This is important because the persistent browser context will use the Chrome data when running the agent.
-    - Check the "Use Own Browser" option within the Browser Settings.
-
-### Option 2: Docker Installation
-
-#### Prerequisites
-- Docker and Docker Compose installed
-  - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (For Windows/macOS)
-  - [Docker Engine](https://docs.docker.com/engine/install/) and [Docker Compose](https://docs.docker.com/compose/install/) (For Linux)
-
-#### Step 1: Clone the Repository
-```bash
-git clone https://github.com/browser-use/web-ui.git
-cd web-ui
-```
-
-#### Step 2: Configure Environment
-1. Create a copy of the example environment file:
-- Windows (Command Prompt):
-```bash
-copy .env.example .env
-```
-- macOS/Linux/Windows (PowerShell):
-```bash
-cp .env.example .env
-```
-2. Open `.env` in your preferred text editor and add your API keys and other settings
-
-#### Step 3: Docker Build and Run
-```bash
-docker compose up --build
-```
-For ARM64 systems (e.g., Apple Silicon Macs), please run follow command:
-```bash
-TARGETPLATFORM=linux/arm64 docker compose up --build
-```
-
-#### Step 4: Enjoy the web-ui and vnc
-- Web-UI: Open `http://localhost:7788` in your browser
-- VNC Viewer (for watching browser interactions): Open `http://localhost:6080/vnc.html`
-  - Default VNC password: "youvncpassword"
-  - Can be changed by setting `VNC_PASSWORD` in your `.env` file
-
-## Changelog
-- [x] **2025/01/26:** Thanks to @vvincent1234. Now browser-use-webui can combine with DeepSeek-r1 to engage in deep thinking!
-- [x] **2025/01/10:** Thanks to @casistack. Now we have Docker Setup option and also Support keep browser open between tasks.[Video tutorial demo](https://github.com/browser-use/web-ui/issues/1#issuecomment-2582511750).
-- [x] **2025/01/06:** Thanks to @richard-devbot. A New and Well-Designed WebUI is released. [Video tutorial demo](https://github.com/warmshao/browser-use-webui/issues/1#issuecomment-2573393113).
-
-# 🔬 Enhanced AI Research Assistant
-
-[![GitHub stars](https://img.shields.io/github/stars/savagelysubtle/ai-research-assistant?style=social)](https://github.com/savagelysubtle/ai-research-assistant/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/savagelysubtle/safeappealnavigator?style=social)](https://github.com/savagelysubtle/safeappealnavigator/stargazers)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 
-**An advanced AI-powered research assistant with specialized legal research capabilities, multi-LLM support, and intelligent document generation.**
+**Your intelligent companion for navigating WorkSafe BC and WCAT appeals. Organize case files, research legal precedents, and build compelling appeals with AI-powered document management and legal research.**
 
-Built upon the foundation of [browser-use](https://github.com/browser-use/browser-use), this enhanced research assistant has evolved into a comprehensive tool for complex research tasks, with particular strength in legal case analysis and document generation.
+SafeAppealNavigator helps injured workers, legal advocates, and their representatives tackle the complex world of Workers' Compensation appeals. Whether you're dealing with a denied claim, preparing for a WCAT hearing, or organizing years of medical documentation, this tool transforms overwhelming legal processes into manageable, organized workflows.
+
+## 🎯 Who This Helps
+
+- **Injured Workers**: Organize your case, understand your rights, and build stronger appeals
+- **Legal Advocates**: Streamline case research and document preparation for clients
+- **Family Members**: Help loved ones navigate complex WorkSafe and WCAT processes
+- **Support Organizations**: Assist multiple clients with consistent, professional case management
 
 ## ✨ Key Features
 
-### 🧠 Multi-LLM Intelligence
-- **Broad LLM Support**: OpenAI GPT-4, Anthropic Claude, Google AI, DeepSeek, Ollama, and more
-- **Intelligent Routing**: Automatically select the best model for specific tasks
-- **Enhanced Reasoning**: Deep thinking capabilities with DeepSeek-r1 integration
+### 📁 Smart Case Organization
+- **Document Management**: Automatically organize medical reports, correspondence, and legal documents
+- **Timeline Builder**: Create visual timelines of your case progression and key milestones
+- **Deadline Tracking**: Never miss critical deadlines or hearing dates
+- **Evidence Categorization**: Smart tagging and organization of supporting documentation
 
-### ⚖️ Advanced Legal Research
-- **WCAT Case Research**: Specialized Workers' Compensation Appeal Tribunal case analysis
-- **Multi-Jurisdictional Search**: BC WCAT, CanLII, and other legal databases
-- **Precedent Analysis**: AI-powered legal precedent identification and analysis
-- **Strategy Generation**: Comprehensive legal strategy development
+### ⚖️ WCAT & WorkSafe Research
+- **Precedent Discovery**: Find WCAT decisions with circumstances similar to your case
+- **Policy Analysis**: Search and understand relevant WorkSafe BC policies and procedures
+- **Case Strength Assessment**: AI analysis of your position based on similar successful cases
+- **Gap Identification**: Discover what evidence or documentation might strengthen your case
 
-### 📄 Intelligent Document Generation
-- **Legal Documents**: Auto-generate appeal notices, case summaries, and legal briefs
-- **Research Reports**: Structured analysis reports with citations
-- **Template System**: Extensible document templates for various use cases
-- **Professional Formatting**: Court-ready document formatting
+### 📝 Professional Document Creation
+- **Appeal Letters**: Generate well-structured appeal submissions with proper legal formatting
+- **Medical Summaries**: Transform complex medical records into clear, compelling narratives
+- **Case Briefs**: Create comprehensive overviews for legal representatives or hearings
+- **Evidence Packages**: Organize supporting documentation for maximum impact
 
-### 🗄️ Advanced Database Features
-- **Full-Text Search**: Search across all case content and metadata
-- **Similarity Analysis**: Find cases similar to your situation using advanced algorithms
-- **Cross-Referencing**: Build relationships between related cases
-- **Progress Tracking**: Track case milestones and deadlines
+### 🤖 AI-Powered Insights
+- **Plain Language Explanations**: Complex legal concepts explained in understandable terms
+- **Strategic Recommendations**: Next steps and strategies based on case analysis
+- **Document Analysis**: AI review of your documents to identify strengths and weaknesses
+- **Research Assistance**: Intelligent search across legal databases and precedent cases
 
-### 🌐 Web Research Capabilities
-- **Intelligent Browsing**: AI-powered web navigation and data extraction
-- **Multi-Source Integration**: Combine information from multiple sources
-- **Content Analysis**: Advanced content parsing and summarization
-- **Persistent Sessions**: Maintain browser state across research tasks
-
-## 🚀 Getting Started
+## 🚀 Installation & Setup
 
 ### Prerequisites
-- **Python 3.13+** with uv package manager
-- **Browser**: Chrome/Chromium for automated browsing
-- **API Keys**: Optional but recommended for enhanced AI capabilities
+- **Python 3.11 or higher**
+- **Node.js 18+** with npm
+- **Windows, macOS, or Linux**
 
-### Installation
+### Quick Start
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/savagelysubtle/ai-research-assistant.git
-   cd ai-research-assistant
+   git clone https://github.com/savagelysubtle/safeappealnavigator.git
+   cd safeappealnavigator
    ```
 
 2. **Set Up Python Environment**
-   We recommend using [uv](https://docs.astral.sh/uv/) for managing the Python environment.
-
+   We recommend using [uv](https://docs.astral.sh/uv/) for managing dependencies:
    ```bash
    uv venv --python 3.13
    ```
@@ -220,272 +80,165 @@ Built upon the foundation of [browser-use](https://github.com/browser-use/browse
 
 3. **Install Dependencies**
    ```bash
+   # Install Python dependencies
    uv sync
 
-   # Install browsers for automated browsing
+   # Install frontend dependencies
+   cd frontend
+   npm install
+   cd ..
+
+   # Install browser automation capabilities
    playwright install chromium --with-deps
    ```
 
 4. **Configure Environment**
    ```bash
-   # Windows (PowerShell/Command Prompt):
-   cp .env.example .env
-   # macOS/Linux:
    cp .env.example .env
    ```
 
-   Open `.env` in your preferred text editor and add your API keys and other settings.
+   Open `.env` in your text editor and add your API keys (optional but recommended for enhanced AI features):
+   ```env
+   OPENAI_API_KEY="your-openai-key"
+   ANTHROPIC_API_KEY="your-anthropic-key"
+   GOOGLE_API_KEY="your-google-key"
+   ```
 
-5. **Launch the Assistant**
+5. **Launch SafeAppealNavigator**
    ```bash
-   python webui.py --ip 127.0.0.1 --port 7788
+   python run_app.py
    ```
 
-   Open your browser and navigate to `http://127.0.0.1:7788`
+   The application will start both the backend and frontend. Open your browser and navigate to `http://localhost:5173`
 
-6. **Using Your Own Browser (Optional)**
-   - Set `BROWSER_PATH` to the executable path of your browser and `BROWSER_USER_DATA` to the user data directory of your browser. Leave `BROWSER_USER_DATA` empty if you want to use local user data.
-     - **Windows**
-       ```env
-       BROWSER_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
-       BROWSER_USER_DATA="C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
-       ```
-       > Note: Replace `YourUsername` with your actual Windows username.
-     - **Mac**
-       ```env
-       BROWSER_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-       BROWSER_USER_DATA="/Users/YourUsername/Library/Application Support/Google/Chrome"
-       ```
-   - Close all Chrome windows
-   - Open the WebUI in a non-Chrome browser, such as Firefox or Edge. This is important because the persistent browser context will use the Chrome data when running the agent.
-   - Check the "Use Own Browser" option within the Browser Settings.
+## 📖 How to Use
 
-## 📖 Usage Guide
+### 🏥 Starting Your Case
 
-### 🔍 Legal Research Workflow
+1. **Create New Case**: Set up a new case file with basic information about your injury and claim
+2. **Upload Documents**: Import medical reports, WorkSafe correspondence, and any legal documents
+3. **Build Timeline**: Add key dates like injury date, claim submission, decisions, and deadlines
+4. **Describe Situation**: Provide details about your injury, treatment, and WorkSafe interactions
 
-1. **Navigate to Legal Research Tab**: Click "⚖️ Legal Research" in the web interface
-2. **Describe Your Case**: Provide detailed case description and circumstances
-3. **Configure Search**: Set search terms, date ranges, and jurisdictions
-4. **Enable AI Analysis**: Turn on LLM-powered legal analysis
-5. **Run Research**: Start the comprehensive research process
-6. **Review Results**: Analyze similar cases and AI-generated strategies
-7. **Generate Documents**: Create legal documents based on findings
+### 🔍 Research & Analysis
 
-### 🌐 General Research
+1. **Find Similar Cases**: Search WCAT decisions for cases with circumstances like yours
+2. **Analyze Outcomes**: Understand how similar cases were decided and what factors were important
+3. **Review Policies**: Research relevant WorkSafe BC policies that apply to your situation
+4. **Identify Precedents**: Discover favorable legal arguments and supporting case law
 
-1. **Task Description**: Clearly describe your research objective
-2. **Select Model**: Choose appropriate LLM for your task
-3. **Configure Browser**: Set up browsing preferences and persistence
-4. **Execute Research**: Let the AI navigate and gather information
-5. **Review & Export**: Analyze results and export findings
+### 📋 Building Your Appeal
 
-### 🧠 Advanced AI Features
+1. **Assess Your Position**: Get AI analysis of your case strength based on precedents
+2. **Identify Gaps**: Discover what additional evidence or documentation you might need
+3. **Draft Documents**: Generate professional appeal letters and supporting documents
+4. **Organize Evidence**: Structure your supporting documentation for maximum impact
 
-- **Deep Thinking**: Enable DeepSeek-r1 for complex reasoning tasks
-- **Multi-Step Analysis**: Break down complex research into manageable steps
-- **Source Verification**: Cross-reference information across multiple sources
-- **Automated Documentation**: Generate comprehensive research reports
+### 📅 Case Management
 
-## 🏗️ Architecture
+1. **Track Progress**: Monitor deadlines, hearing dates, and case milestones
+2. **Manage Communications**: Organize all correspondence with WorkSafe, medical providers, and legal representatives
+3. **Prepare for Hearings**: Get talking points and evidence organization for WCAT hearings
+4. **Document Everything**: Maintain detailed records of all case-related activities
 
-### Core Components
+## 📊 Real-World Success Stories
 
-```
-├── src/browser_use_web_ui/
-│   ├── agent/
-│   │   ├── legal_research/          # Specialized legal research agent
-│   │   ├── deep_research/           # Advanced research capabilities
-│   │   └── browser_use/             # Core browsing agent
-│   ├── browser/                     # Browser management
-│   ├── controller/                  # Task orchestration
-│   ├── utils/                       # Utilities and LLM providers
-│   └── webui/                       # Web interface components
-├── legal_templates/                 # Legal document templates
-├── plans/                          # Research planning templates
-└── tmp/                            # Temporary files and cache
-```
+### 🏗️ Construction Worker - Denied Surgery Coverage
+**Challenge**: Back injury from lifting, surgery coverage denied
+**Solution**: Found 12 similar WCAT cases where surgery was approved, generated appeal emphasizing medical necessity
+**Outcome**: Surgery coverage approved on appeal
 
-### Key Technologies
+### 🏥 Healthcare Worker - "Not Work-Related" Claim
+**Challenge**: Repetitive strain injury denied as non-work related
+**Solution**: Organized evidence linking injury to work duties, found precedents for similar injuries
+**Outcome**: Claim accepted after comprehensive appeal submission
 
-- **Browser Automation**: Playwright for reliable web interaction
-- **AI Integration**: LangChain for LLM orchestration
-- **Database**: SQLite for efficient case storage
-- **Web Interface**: Gradio for user-friendly interaction
-- **Document Generation**: Template-based legal document creation
+### 🚛 Driver - Mental Health Benefits
+**Challenge**: PTSD after workplace accident, mental health benefits denied
+**Solution**: Research showed precedents for psychological injury acceptance, organized witness statements
+**Outcome**: Mental health claim recognized and benefits approved
 
-## 🔧 Configuration
+## 🛡️ Privacy & Security
 
-### Environment Variables
-
-```bash
-# Core Settings
-WCAT_DATABASE_PATH="F:\WcatDB\cases.db"
-
-# LLM API Keys
-OPENAI_API_KEY="your-openai-key"
-ANTHROPIC_API_KEY="your-anthropic-key"
-GOOGLE_API_KEY="your-google-key"
-DEEPSEEK_API_KEY="your-deepseek-key"
-
-# Browser Settings (Optional)
-BROWSER_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe"
-BROWSER_USER_DATA="C:\Users\YourUsername\AppData\Local\Google\Chrome\User Data"
-```
-
-### Advanced Configuration
-
-```python
-# Legal Research Agent
-agent = LegalCaseResearchAgent(
-    browser=browser,
-    context=context,
-    enable_llm_analysis=True,
-    llm_provider="openai",
-    enable_document_generation=True,
-    enable_multi_jurisdictional=True
-)
-
-# Multi-LLM Setup
-llm_config = {
-    "primary": "openai",
-    "reasoning": "deepseek",
-    "research": "anthropic"
-}
-```
-
-## 📊 Examples
-
-### Legal Case Research
-
-```python
-# Case research example
-case_summary = """
-Warehouse employee with 3 years of repetitive heavy lifting (40-60 lbs).
-Developed L4-L5 spinal stenosis with radiculopathy causing right leg
-pain and numbness.
-"""
-
-results = await agent.run_legal_research(
-    search_queries=["stenosis", "warehouse injury", "repetitive lifting"],
-    user_case_summary=case_summary,
-    date_range={"start_date": "2020-01-01", "end_date": "2024-12-31"},
-    max_cases_per_query=20
-)
-```
-
-### Document Generation
-
-```python
-# Generate legal documents
-documents = await agent.generate_legal_documents(
-    case_details={
-        "appellant_name": "John Smith",
-        "appellant_address": "123 Main St, Vancouver, BC",
-        "summary": case_summary
-    },
-    precedent_cases=similar_cases
-)
-```
-
-## 🛡️ Best Practices
-
-### Legal Research
-- Use specific, relevant search terms
-- Set appropriate date ranges for recent precedents
-- Review AI-generated content before use
-- Maintain professional documentation standards
-
-### Data Management
-- Regular database backups
-- Secure API key storage
-- Monitor system performance
-- Keep templates updated
+- **Local Data Storage**: All your case information stays on your computer
+- **Secure API Connections**: All AI interactions use encrypted connections
+- **No Data Sharing**: Your personal and legal information is never shared or stored externally
+- **Open Source**: Full transparency - review the code yourself
 
 ## 🤝 Contributing
 
-We welcome contributions! This project has evolved significantly from its browser-use origins and continues to improve.
+SafeAppealNavigator is open source and welcomes contributions from the community. Whether you're a developer, legal professional, or someone who has navigated the WorkSafe system, your insights can help others.
 
 ### Development Setup
 
 ```bash
-git clone https://github.com/savagelysubtle/ai-research-assistant.git
-cd ai-research-assistant
+git clone https://github.com/savagelysubtle/safeappealnavigator.git
+cd safeappealnavigator
 uv sync
-uv run ty check src/  # Type checking
 ```
 
 ### Code Standards
 - Follow PEP 8 style guidelines
 - Add comprehensive docstrings
 - Include type hints for all functions
-- Write unit tests for new features
+- Write tests for new features
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-**Key License Benefits:**
 - ✅ Commercial use allowed
 - ✅ Modification and distribution permitted
 - ✅ Patent protection included
-- ⚠️ **Attribution required** - Give credit to SavagelySubtle
-- ⚠️ **Notice of changes required** - Document modifications
+- ⚠️ Attribution required
+- ⚠️ Notice of changes required
 
-## 🙏 Acknowledgments
-
-This project builds upon the excellent foundation provided by the open-source community:
-
-- **[Browser-Use Framework](https://github.com/browser-use/browser-use)**: The core browser automation framework that powers this assistant
-- **[Browser-Use Web UI](https://github.com/browser-use/web-ui)**: Original web interface inspiration and architecture
-- **[WarmShao](https://github.com/warmshao)**: Original creator of browser-use-webui that inspired many features
-- **Legal Data Sources**: WCAT and CanLII for providing accessible legal case databases
-- **AI Providers**: OpenAI, Anthropic, Google, DeepSeek for model access
-- **Open Source Community**: All contributors who have shaped browser automation and AI research tools
-
-**Special Thanks**: We extend our gratitude to the browser-use team for creating such a robust foundation for AI-powered web interaction. This project represents an evolution and specialization of their excellent work, focused specifically on legal research and document generation use cases.
-
-## 🆘 Support
+## 🆘 Support & Resources
 
 - **Documentation**: Comprehensive guides in `/docs`
 - **Issues**: Report bugs and request features on GitHub
-- **Discussions**: Community discussions for questions and ideas
-- **Examples**: Demo scripts in `/examples`
-
-## 🚨 Legal Disclaimer
-
-This tool assists with legal research and document preparation. **Always consult qualified legal professionals** for legal advice and review all generated content before use in legal proceedings.
+- **Discussions**: Community support and questions
+- **Legal Disclaimer**: This tool assists with legal research and document preparation. Always consult qualified legal professionals for legal advice.
 
 ---
 
 **Created and maintained by [SavagelySubtle](https://github.com/savagelysubtle)**
 
-*Transforming AI research capabilities one case at a time* 🔬⚖️
+*Empowering injured workers to navigate the legal system with confidence* ⚖️
 
-## AiResearchAgent IDE
+---
 
-The AiResearchAgent is now integrated with a powerful, VSCode-based user interface, forked from the open-source `void-ide`. This provides a seamless environment for developing with AI agents directly in your editor.
+## 🔧 Technical Architecture & Acknowledgments
 
-### Features
+SafeAppealNavigator is built using modern web technologies and incorporates several open-source libraries to provide its functionality:
 
-- **Integrated AI Chat**: Interact with backend AI agents through a familiar chat interface.
-- **Inline Code Modifications**: Request and apply code changes directly in the editor using `Cmd+K` or a right-click context menu.
-- **Agent-Driven File System Operations**: Agents can read, write, and modify files in your workspace.
-- **Unified Workflow**: A single command starts the entire backend and frontend development environment.
+### Core Technologies
+- **Frontend**: React + TypeScript with Tailwind CSS for modern, responsive UI
+- **Backend**: FastAPI with WebSocket support for real-time communication
+- **Database**: SQLite with vector search capabilities for case storage and similarity analysis
+- **AI Integration**: Support for multiple LLM providers (OpenAI, Anthropic, Google, DeepSeek, Ollama)
 
-### Getting Started
+### Key Libraries & Components
 
-#### 1. Running the Application
+**Browser Automation**: Utilizes browser automation agents for intelligent web navigation and legal database research. These components enable automated interaction with WCAT, CanLII, and other legal research platforms.
 
-**For Users:**
+**Agent Communication (A2A)**: Implements an Agent-to-Agent communication protocol that allows specialized AI agents to coordinate complex legal research tasks, document analysis, and case preparation workflows.
 
-1.  Download the latest version for your operating system from the [**Releases**](https://github.com/savagelysubtle/AiResearchAgent/releases) page.
-2.  Unzip the application.
-3.  Launch the backend services (instructions to be provided).
-4.  Run the executable.
+**AG-UI Protocol**: Custom WebSocket-based protocol for real-time communication between the React frontend and Python backend, enabling seamless user interaction with the multi-agent system.
 
-**For Developers:**
+**Multi-Agent Architecture**: Employs specialized agents including:
+- Document Processing Coordinator
+- Legal Research Coordinator
+- Database Query Coordinator
+- Chief Legal Orchestrator
 
-Please see the detailed [**IDE Integration Guide**](./Documentation/IDE_Integration_Guide.md) for instructions on how to set up the development environment.
+### Open Source Foundations
 
-## Installation
+SafeAppealNavigator leverages and builds upon excellent open-source projects:
+- **Playwright**: For reliable browser automation
+- **LangChain**: For LLM orchestration and prompt management
+- **AutoGen**: For multi-agent conversation patterns
+- **FastAPI**: For high-performance API development
+- **React**: For modern user interface development
+
+This application represents a specialized legal research tool that combines these technologies to serve the specific needs of WorkSafe BC and WCAT case management.
