@@ -1,4 +1,40 @@
-import { EventEmitter } from 'events';
+// Custom EventEmitter implementation for browser compatibility
+class CustomEventEmitter {
+  private events: Record<string, Function[]> = {};
+
+  on(event: string, listener: Function): this {
+    if (!this.events[event]) {
+      this.events[event] = [];
+    }
+    this.events[event].push(listener);
+    return this;
+  }
+
+  emit(event: string, ...args: any[]): boolean {
+    if (!this.events[event]) {
+      return false;
+    }
+    this.events[event].forEach(listener => listener(...args));
+    return true;
+  }
+
+  removeListener(event: string, listener: Function): this {
+    if (!this.events[event]) {
+      return this;
+    }
+    this.events[event] = this.events[event].filter(l => l !== listener);
+    return this;
+  }
+
+  removeAllListeners(event?: string): this {
+    if (event) {
+      delete this.events[event];
+    } else {
+      this.events = {};
+    }
+    return this;
+  }
+}
 
 export enum AGUIEventType {
   // Lifecycle events
@@ -55,7 +91,7 @@ export interface AGUIState {
   sessionContext: Record<string, any>;
 }
 
-export class AGUIClient extends EventEmitter {
+export class AGUIClient extends CustomEventEmitter {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;

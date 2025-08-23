@@ -111,6 +111,10 @@ SafeAppealNavigator helps injured workers, legal advocates, and their representa
 
    The application will start both the backend and frontend. Open your browser and navigate to `http://localhost:5173`
 
+6. **Optional: Configure Additional Tools**
+
+   SafeAppealNavigator supports extensible tool integration through MCP (Model Context Protocol). You can configure additional research databases, document processing services, or legal research tools by editing `data/mcp.json`. The system comes pre-configured with essential file management and vector database tools for case organization and similarity search.
+
 ## 📖 How to Use
 
 ### 🏥 Starting Your Case
@@ -222,15 +226,17 @@ SafeAppealNavigator is built using modern web technologies and incorporates seve
 
 **Browser Automation**: Utilizes browser automation agents for intelligent web navigation and legal database research. These components enable automated interaction with WCAT, CanLII, and other legal research platforms.
 
+**Model Context Protocol (MCP) Integration**: Implements standardized MCP client patterns for extensible tool integration. This allows SafeAppealNavigator to seamlessly connect with external services, databases, and specialized legal research tools through a unified protocol, enhancing document analysis and case research capabilities.
+
 **Agent Communication (A2A)**: Implements an Agent-to-Agent communication protocol that allows specialized AI agents to coordinate complex legal research tasks, document analysis, and case preparation workflows.
 
 **AG-UI Protocol**: Custom WebSocket-based protocol for real-time communication between the React frontend and Python backend, enabling seamless user interaction with the multi-agent system.
 
 **Multi-Agent Architecture**: Employs specialized agents including:
-- Document Processing Coordinator
-- Legal Research Coordinator
-- Database Query Coordinator
-- Chief Legal Orchestrator
+- Document Processing Coordinator (with file system and database tools)
+- Legal Research Coordinator (with web research and precedent analysis tools)
+- Database Query Coordinator (with vector search and data analysis tools)
+- Chief Legal Orchestrator (coordinating all specialized agents)
 
 ### Open Source Foundations
 

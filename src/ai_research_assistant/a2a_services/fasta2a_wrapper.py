@@ -87,41 +87,34 @@ def create_agent_instance(
 
 
 def create_skills_from_agent(agent_instance: BasePydanticAgent) -> List[Skill]:
-    """Extract skills from agent methods and convert them to FastA2A Skill format."""
+    """Extract @agent_skill decorated methods from agent."""
     skills = []
 
-    # Get all methods that could be skills
+    # Get all methods that have the @agent_skill decorator
     for attr_name in dir(agent_instance):
         if not attr_name.startswith("_"):
             attr_value = getattr(agent_instance, attr_name)
-            if callable(attr_value) and hasattr(attr_value, "__call__"):
-                # Skip common methods that aren't skills
-                if attr_name not in [
-                    "__init__",
-                    "run_skill",
-                    "health_check",
-                    "get_status",
-                    "_initialize_llm",
-                    "_get_initial_tools",
-                    "run",
-                    "to_a2a",
-                ]:
-                    # Create a skill definition
-                    skill_description = (
-                        getattr(attr_value, "__doc__", None)
-                        or f"Executes the {attr_name} skill"
-                    )
+            if (
+                callable(attr_value)
+                and hasattr(attr_value, "_is_agent_skill")
+                and attr_value._is_agent_skill
+            ):
+                # Create a skill definition
+                skill_description = (
+                    getattr(attr_value, "__doc__", None)
+                    or f"Executes the {attr_name} skill"
+                )
 
-                    skills.append(
-                        Skill(
-                            id=attr_name,
-                            name=attr_name.replace("_", " ").title(),
-                            description=skill_description.split("\n")[0],
-                            tags=[agent_instance.agent_name],
-                            input_modes=["application/json"],
-                            output_modes=["application/json"],
-                        )
+                skills.append(
+                    Skill(
+                        id=attr_name,
+                        name=attr_name.replace("_", " ").title(),
+                        description=skill_description.split("\n")[0],
+                        tags=[agent_instance.agent_name],
+                        input_modes=["application/json"],
+                        output_modes=["application/json"],
                     )
+                )
 
     logger.info(
         f"Created {len(skills)} skills for agent {agent_instance.agent_name}: {[s['id'] for s in skills]}"

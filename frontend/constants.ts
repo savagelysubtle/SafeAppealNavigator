@@ -1,14 +1,23 @@
 // Application-wide constants
 
+// Application name
+export const APP_NAME = 'SafeAppealNavigator';
+
+// Default colors
+export const DEFAULT_TAG_COLOR = '#3B82F6'; // Blue
+export const DEFAULT_WCAT_PATTERN_TAG_COLOR = '#8B5CF6'; // Purple
+
+// File handling
+export const FILE_TYPES_SUPPORTED = ['.pdf', '.docx', '.doc', '.txt', '.rtf'];
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.doc', '.txt', '.rtf'];
+
 // Regular expression for matching policy numbers (e.g., "AP1-234-567", "RS8-999-888")
 export const POLICY_NUMBER_REGEX = /\b([A-Z]{2}\d{1,2}-\d{3}-\d{3})\b/g;
 
-// Default color for WCAT pattern tags
-export const DEFAULT_WCAT_PATTERN_TAG_COLOR = '#8B5CF6'; // Purple
-
-// Other commonly used constants
-export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-export const ALLOWED_FILE_TYPES = ['.pdf', '.docx', '.doc', '.txt', '.rtf'];
+// Token and context handling
+export const SIMULATED_CONTEXT_WINDOW_TOKENS = 30000; // Simulated context window size
+export const SIMULATED_TOKEN_WARNING_THRESHOLD = 25000; // Warning threshold for context size
 
 // API endpoints
 export const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:10200';

@@ -5,7 +5,7 @@ import { POLICY_NUMBER_REGEX, DEFAULT_WCAT_PATTERN_TAG_COLOR } from '../constant
 // Removed direct MCP client imports - MCP is now handled entirely by the backend
 // Frontend only manages UI state for MCP server configuration
 // All MCP operations go through backend API endpoints at /api/mcp/*
-import { getMCPServerStatus, writeMCPFile, deleteMCPFile } from '../AppContextHelper';
+import { getMCPServerStatus, writeMCPFile, deleteMCPFile } from './AppContextHelper';
 
 console.log("AppContext.tsx: Module loaded.");
 
@@ -25,7 +25,7 @@ interface AppContextType {
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => ChatMessage;
   clearChatHistory: () => void;
   auditLog: AuditLogEntry[];
-  addAuditLogEntry: (action: string, details: string, status?: 'info' | 'success' | 'warning' | 'error') => void;
+  addAuditLogEntry: (action: string, details: string) => void;
   mcpServerStatus: McpServerStatus;
   setMcpServerStatus: (status: McpServerStatus) => void;
   // MCP client removed - all MCP operations now go through backend API
@@ -136,13 +136,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [dynamicMarkers, setDynamicMarkersInternal] = useState<Record<string, DynamicMarker[]>>({});
 
 
-  const addAuditLogEntry = useCallback((action: string, details: string, status: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+  const addAuditLogEntry = useCallback((action: string, details: string) => {
     const newEntry: AuditLogEntry = {
       id: uuidv4(),
       timestamp: new Date().toISOString(),
       action,
       details,
-      status,
     };
     setAuditLog((prevLog) => [newEntry, ...prevLog.slice(0, 199)]);
   }, []);
@@ -151,7 +150,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCurrentError(error);
     if (error) {
         console.error("AppContext: Application Error Set:", error);
-        addAuditLogEntry('APPLICATION_ERROR_SET', error, 'error');
+        addAuditLogEntry('APPLICATION_ERROR_SET', error);
     }
   }, [addAuditLogEntry]);
 
@@ -224,27 +223,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (configName === null) {
         setActiveApiConfigNameInternal(null);
         localStorage.removeItem('mcp-active-api-config-name');
-        if (mcpClientInstance) {
-            await mcpClientInstance.initialize(null);
-        }
         setMcpServerStatus({ isRunning: false, error: "No active API configuration." });
         addAuditLogEntry('MCP_ACTIVE_API_CONFIG_CLEARED', 'Active API config cleared.');
         localSetError(null);
-        setIsMcpClientLoading(false);
         return;
     }
 
     const newActiveConfig = mcpApiConfigs.find(c => c.configName === configName);
-    if (newActiveConfig && mcpClientInstance) {
+    if (newActiveConfig) {
       setActiveApiConfigNameInternal(configName);
       localStorage.setItem('mcp-active-api-config-name', configName);
 
-      await mcpClientInstance.initialize(newActiveConfig);
-      addAuditLogEntry('MCP_ACTIVE_API_CONFIG_SET', `Active API config set to: ${configName}. McpClient re-initialized.`);
-
-      setIsMcpClientLoading(true);
+      setMcpServerStatus({ isRunning: false, error: "API configuration set, but MCP server status not yet fetched." });
       try {
-        const status = await mcpClientInstance.getServerStatus();
+        const status = await getMCPServerStatus();
         setMcpServerStatus(status);
         if (!status.isRunning && status.error) {
           localSetError(`MCP Server (${newActiveConfig.configName}) at ${newActiveConfig.baseApiUrl} Issue: ${status.error}.`);
@@ -258,17 +250,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localSetError(errorMsg);
         setMcpServerStatus({isRunning: false, error: errorMsg});
         addAuditLogEntry('MCP_STATUS_FETCH_ERROR', errorMsg);
-      } finally {
-        setIsMcpClientLoading(false);
       }
 
     } else {
-      const errorMsg = `Failed to set active API config: ${configName} not found or McpClient not available.`;
+      const errorMsg = `Failed to set active API config: ${configName} not found.`;
       localSetError(errorMsg);
       addAuditLogEntry('MCP_ACTIVE_API_CONFIG_ERROR', errorMsg);
-       setIsMcpClientLoading(false);
     }
-  }, [mcpApiConfigs, mcpClientInstance, addAuditLogEntry, localSetError]);
+  }, [mcpApiConfigs, addAuditLogEntry, localSetError]);
 
 
   useEffect(() => {
@@ -290,7 +279,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 setter(JSON.parse(savedData));
             } catch (e: any) {
                 console.error(`AppContext.tsx: Error parsing ${itemName} from localStorage:`, e.message);
-                addAuditLogEntry('LOCALSTORAGE_PARSE_ERROR', `Error parsing ${itemName}: ${e.message}. Data might be lost or reset.`, 'warning');
+                addAuditLogEntry('LOCALSTORAGE_PARSE_ERROR', `Error parsing ${itemName}: ${e.message}. Data might be lost or reset.`);
             }
         }
     };
@@ -392,38 +381,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       originalFileNameForMcp: string,
       contentForMcp: string
     ): Promise<EvidenceFile | null> => {
-    if (!mcpClientInstance || !mcpClientInstance.ready) {
-      localSetError(`MCP Client not ready (${mcpClientInstance?.getInitializationError() || 'unknown reason'}). Cannot add file to server.`);
-      addAuditLogEntry('ADD_FILE_ERROR_MCP_UNREADY', `MCP Client not ready for file ${fileData.name}`);
+    if (!apiKey) {
+      localSetError("Gemini API Key is not set. Cannot add file to server.");
+      addAuditLogEntry('ADD_FILE_ERROR_NO_API_KEY', `API Key missing for file ${fileData.name}`);
       return null;
     }
 
-    const successOnMcp = await mcpClientInstance.writeFile(mcpPath, contentForMcp);
-    if (!successOnMcp) {
-        localSetError(`Failed to write file "${originalFileNameForMcp}" to MCP path "${mcpPath}".`);
-        addAuditLogEntry('ADD_FILE_ERROR_MCP_WRITE', `Failed MCP write for ${originalFileNameForMcp} to ${mcpPath}`);
-        return null;
+    try {
+      const successOnMcp = await writeMCPFile(mcpPath, contentForMcp);
+      if (!successOnMcp) {
+          localSetError(`Failed to write file "${originalFileNameForMcp}" to MCP path "${mcpPath}".`);
+          addAuditLogEntry('ADD_FILE_ERROR_MCP_WRITE', `Failed MCP write for ${originalFileNameForMcp} to ${mcpPath}`);
+          return null;
+      }
+      addAuditLogEntry('FILE_WRITTEN_MCP', `File "${originalFileNameForMcp}" written to MCP path "${mcpPath}".`);
+
+      const newFile: EvidenceFile = {
+        ...fileData,
+        id: uuidv4(),
+        tags: [],
+        annotations: [],
+        mcpPath,
+        isProcessing: false,
+        metadata: { ...fileData.metadata, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString() },
+        referencedPolicies: []
+      };
+
+      const policyRefs = extractPolicyReferencesFromFile(newFile);
+      newFile.referencedPolicies = policyRefs;
+
+      setFiles((prevFiles) => [...prevFiles, newFile]);
+      addAuditLogEntry('FILE_ADDED_APP', `File "${newFile.name}" added to app. Policies found: ${policyRefs.length}`);
+      return newFile;
+    } catch (error: any) {
+      const errorMsg = `Failed to add file "${fileData.name}" to MCP: ${error.message}`;
+      localSetError(errorMsg);
+      addAuditLogEntry('ADD_FILE_ERROR_MCP_GENERAL', errorMsg);
+      return null;
     }
-    addAuditLogEntry('FILE_WRITTEN_MCP', `File "${originalFileNameForMcp}" written to MCP path "${mcpPath}".`);
-
-    const newFile: EvidenceFile = {
-      ...fileData,
-      id: uuidv4(),
-      tags: [],
-      annotations: [],
-      mcpPath,
-      isProcessing: false,
-      metadata: { ...fileData.metadata, createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString() },
-      referencedPolicies: []
-    };
-
-    const policyRefs = extractPolicyReferencesFromFile(newFile);
-    newFile.referencedPolicies = policyRefs;
-
-    setFiles((prevFiles) => [...prevFiles, newFile]);
-    addAuditLogEntry('FILE_ADDED_APP', `File "${newFile.name}" added to app. Policies found: ${policyRefs.length}`);
-    return newFile;
-  }, [mcpClientInstance, addAuditLogEntry, extractPolicyReferencesFromFile, localSetError]);
+  }, [apiKey, addAuditLogEntry, extractPolicyReferencesFromFile, localSetError]);
 
   const updateFile = useCallback((fileId: string, updates: Partial<EvidenceFile>) => {
     setFiles((prevFiles) =>
@@ -447,17 +443,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const fileToDelete = files.find(f => f.id === fileId);
     if (!fileToDelete) return;
 
-    if (mcpClientInstance && mcpClientInstance.ready && fileToDelete.mcpPath) {
-        const successOnMcp = await mcpClientInstance.deleteFileOrDirectory(fileToDelete.mcpPath);
+    try {
+      if (fileToDelete.mcpPath) {
+        const successOnMcp = await deleteMCPFile(fileToDelete.mcpPath);
         if (!successOnMcp) {
             localSetError(`Failed to delete file "${fileToDelete.name}" from MCP path "${fileToDelete.mcpPath}". It will only be removed from the app.`);
             addAuditLogEntry('DELETE_FILE_ERROR_MCP', `MCP delete failed for ${fileToDelete.name} at ${fileToDelete.mcpPath}`);
         } else {
              addAuditLogEntry('FILE_DELETED_MCP', `File "${fileToDelete.name}" deleted from MCP path "${fileToDelete.mcpPath}".`);
         }
-    } else if (fileToDelete.mcpPath) {
-        localSetError(`MCP Client not ready (${mcpClientInstance?.getInitializationError() || 'unknown reason'}). File will be removed from app list only, not from server.`);
-        addAuditLogEntry('DELETE_FILE_WARN_MCP_UNREADY', `MCP Client not ready for deleting ${fileToDelete.name} from ${fileToDelete.mcpPath}`);
+      }
+    } catch (error: any) {
+      const errorMsg = `Failed to delete file "${fileToDelete.name}" from MCP: ${error.message}`;
+      localSetError(errorMsg);
+      addAuditLogEntry('DELETE_FILE_ERROR_MCP_GENERAL', errorMsg);
     }
 
     setFiles((prevFiles) => prevFiles.filter((f) => f.id !== fileId));
@@ -467,7 +466,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return newMarkers;
     });
     addAuditLogEntry('FILE_DELETED_APP', `File "${fileToDelete.name}" (ID: ${fileId}) deleted from app.`);
-  }, [files, mcpClientInstance, addAuditLogEntry, localSetError]);
+  }, [files, addAuditLogEntry, localSetError]);
 
   const getFileById = useCallback((fileId: string) => {
     return files.find(f => f.id === fileId);
@@ -560,22 +559,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const caseToDelete = wcatCases.find(c => c.id === caseId);
     if (!caseToDelete) return;
 
-    if (mcpClientInstance && mcpClientInstance.ready && caseToDelete.mcpPath) {
-        const successOnMcp = await mcpClientInstance.deleteFileOrDirectory(caseToDelete.mcpPath);
+    try {
+      if (caseToDelete.mcpPath) {
+        const successOnMcp = await deleteMCPFile(caseToDelete.mcpPath);
         if (!successOnMcp) {
             localSetError(`Failed to delete WCAT case file "${caseToDelete.decisionNumber}" from MCP path "${caseToDelete.mcpPath}". It will only be removed from the app database.`);
             addAuditLogEntry('DELETE_WCAT_FILE_ERROR_MCP', `MCP delete failed for WCAT ${caseToDelete.decisionNumber} at ${caseToDelete.mcpPath}`);
         } else {
              addAuditLogEntry('WCAT_FILE_DELETED_MCP', `WCAT case file "${caseToDelete.decisionNumber}" deleted from MCP path "${caseToDelete.mcpPath}".`);
         }
-    } else if (caseToDelete.mcpPath) {
-        localSetError(`MCP Client not ready for WCAT file deletion. File will be removed from app list only, not from server.`);
-        addAuditLogEntry('DELETE_WCAT_FILE_WARN_MCP_UNREADY', `MCP Client not ready for deleting WCAT ${caseToDelete.decisionNumber} from ${caseToDelete.mcpPath}`);
+      }
+    } catch (error: any) {
+      const errorMsg = `Failed to delete WCAT case file "${caseToDelete.decisionNumber}" from MCP: ${error.message}`;
+      localSetError(errorMsg);
+      addAuditLogEntry('DELETE_WCAT_FILE_ERROR_MCP_GENERAL', errorMsg);
     }
 
     setWcatCases((prevCases) => prevCases.filter((c) => c.id !== caseId));
     addAuditLogEntry('WCAT_CASE_DELETED_APP', `WCAT Case "${caseToDelete.decisionNumber}" (ID: ${caseId}) deleted from app.`);
-  }, [wcatCases, mcpClientInstance, addAuditLogEntry, localSetError]);
+  }, [wcatCases, addAuditLogEntry, localSetError]);
 
   const generateAndAssignWcatPatternTags = useCallback(async (caseId: string): Promise<void> => {
     if (!apiKey) {
@@ -619,81 +621,84 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       pdfContentString: string,
       originalFileName: string
     ): Promise<PolicyManual | null> => {
-    if (!mcpClientInstance || !mcpClientInstance.ready) {
-        localSetError("MCP Client not ready. Cannot add policy manual.");
-        addAuditLogEntry('ADD_POLICY_MANUAL_ERROR_MCP_UNREADY', `MCP Client not ready for manual ${manualInfo.manualName}`);
-        return null;
-    }
-     if (!apiKey) {
-      localSetError("Gemini API Key not set. Cannot process policy manual for indexing.");
+    if (!apiKey) {
+      localSetError("Gemini API Key is not set. Cannot add policy manual.");
       addAuditLogEntry('ADD_POLICY_MANUAL_ERROR_NO_API_KEY', `API Key missing for manual ${manualInfo.manualName}`);
       return null;
     }
 
-    const manualId = uuidv4();
-    const mcpPath = `/policy_manuals/${manualId}_${originalFileName.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-
-    const mcpSuccess = await mcpClientInstance.writeFile(mcpPath, pdfContentString);
-    if (!mcpSuccess) {
-        localSetError(`Failed to write policy manual "${manualInfo.manualName}" to MCP path "${mcpPath}".`);
-        addAuditLogEntry('ADD_POLICY_MANUAL_ERROR_MCP_WRITE', `Failed MCP write for ${manualInfo.manualName} to ${mcpPath}`);
-        return null;
-    }
-    addAuditLogEntry('POLICY_MANUAL_WRITTEN_MCP', `Manual "${manualInfo.manualName}" written to MCP path "${mcpPath}".`);
-
-    const rawTextContent = pdfContentString;
-
-    setIsLoading(true);
-    let policyEntries: PolicyEntry[] = [];
     try {
-        addAuditLogEntry('POLICY_MANUAL_INDEXING_START', `AI indexing started for manual ${manualInfo.manualName}`);
-        // TODO: Implement policy extraction through AG-UI backend
-      // policyEntries = await extractPolicyEntriesFromManualText(rawTextContent, manualInfo.manualName);
-      policyEntries = []; // Placeholder until backend implementation
-        addAuditLogEntry('POLICY_MANUAL_INDEXING_SUCCESS', `AI indexing complete for ${manualInfo.manualName}. Found ${policyEntries.length} entries.`);
-    } catch(error: any) {
-        localSetError(`AI failed to index policy manual ${manualInfo.manualName}: ${error.message}`);
-        addAuditLogEntry('POLICY_MANUAL_INDEXING_ERROR', `AI indexing error for ${manualInfo.manualName}: ${error.message}`);
-    } finally {
-        setIsLoading(false);
+      const manualId = uuidv4();
+      const mcpPath = `/policy_manuals/${manualId}_${originalFileName.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
+
+      const mcpSuccess = await writeMCPFile(mcpPath, pdfContentString);
+      if (!mcpSuccess) {
+          localSetError(`Failed to write policy manual "${manualInfo.manualName}" to MCP path "${mcpPath}".`);
+          addAuditLogEntry('ADD_POLICY_MANUAL_ERROR_MCP_WRITE', `Failed MCP write for ${manualInfo.manualName} to ${mcpPath}`);
+          return null;
+      }
+      addAuditLogEntry('POLICY_MANUAL_WRITTEN_MCP', `Manual "${manualInfo.manualName}" written to MCP path "${mcpPath}".`);
+
+      const rawTextContent = pdfContentString;
+
+      setIsLoading(true);
+      let policyEntries: PolicyEntry[] = [];
+      try {
+          addAuditLogEntry('POLICY_MANUAL_INDEXING_START', `AI indexing started for manual ${manualInfo.manualName}`);
+          // TODO: Implement policy extraction through AG-UI backend
+        // policyEntries = await extractPolicyEntriesFromManualText(rawTextContent, manualInfo.manualName);
+        policyEntries = []; // Placeholder until backend implementation
+          addAuditLogEntry('POLICY_MANUAL_INDEXING_SUCCESS', `AI indexing complete for ${manualInfo.manualName}. Found ${policyEntries.length} entries.`);
+      } catch(error: any) {
+          localSetError(`AI failed to index policy manual ${manualInfo.manualName}: ${error.message}`);
+          addAuditLogEntry('POLICY_MANUAL_INDEXING_ERROR', `AI indexing error for ${manualInfo.manualName}: ${error.message}`);
+      } finally {
+          setIsLoading(false);
+      }
+
+      const newManual: PolicyManual = {
+        id: manualId,
+        manualName: manualInfo.manualName,
+        sourceUrl: manualInfo.sourceUrl,
+        version: manualInfo.version,
+        mcpPath,
+        rawTextContent,
+        policyEntries,
+        ingestedAt: new Date().toISOString(),
+        isProcessing: false,
+      };
+
+      setPolicyManuals(prevManuals => [...prevManuals, newManual]);
+      addAuditLogEntry('POLICY_MANUAL_ADDED_APP', `Policy Manual "${newManual.manualName}" added to app.`);
+      return newManual;
+    } catch (error: any) {
+      const errorMsg = `Failed to add policy manual "${manualInfo.manualName}": ${error.message}`;
+      localSetError(errorMsg);
+      addAuditLogEntry('ADD_POLICY_MANUAL_ERROR_GENERAL', errorMsg);
+      return null;
     }
-
-    const newManual: PolicyManual = {
-      id: manualId,
-      manualName: manualInfo.manualName,
-      sourceUrl: manualInfo.sourceUrl,
-      version: manualInfo.version,
-      mcpPath,
-      rawTextContent,
-      policyEntries,
-      ingestedAt: new Date().toISOString(),
-      isProcessing: false,
-    };
-
-    setPolicyManuals(prevManuals => [...prevManuals, newManual]);
-    addAuditLogEntry('POLICY_MANUAL_ADDED_APP', `Policy Manual "${newManual.manualName}" added to app.`);
-    return newManual;
-  }, [mcpClientInstance, apiKey, addAuditLogEntry, localSetError, setIsLoading]);
+  }, [apiKey, addAuditLogEntry, localSetError, setIsLoading]);
 
   const deletePolicyManual = useCallback(async (manualId: string): Promise<void> => {
     const manualToDelete = policyManuals.find(m => m.id === manualId);
     if (!manualToDelete) return;
 
-    if (mcpClientInstance && mcpClientInstance.ready && manualToDelete.mcpPath) {
-        const successOnMcp = await mcpClientInstance.deleteFileOrDirectory(manualToDelete.mcpPath);
-        if (!successOnMcp) {
-            localSetError(`Failed to delete policy manual "${manualToDelete.manualName}" from MCP. It will only be removed from app.`);
-            addAuditLogEntry('DELETE_POLICY_MANUAL_ERROR_MCP', `MCP delete failed for ${manualToDelete.manualName}`);
-        } else {
-             addAuditLogEntry('POLICY_MANUAL_DELETED_MCP', `Manual "${manualToDelete.manualName}" deleted from MCP.`);
-        }
-    } else if (manualToDelete.mcpPath) {
-        localSetError(`MCP Client not ready for policy manual deletion. File will be removed from app list only.`);
-        addAuditLogEntry('DELETE_POLICY_MANUAL_WARN_MCP_UNREADY', `MCP Client not ready for deleting ${manualToDelete.manualName}`);
+    try {
+      const successOnMcp = await deleteMCPFile(manualToDelete.mcpPath);
+      if (!successOnMcp) {
+          localSetError(`Failed to delete policy manual "${manualToDelete.manualName}" from MCP. It will only be removed from app.`);
+          addAuditLogEntry('DELETE_POLICY_MANUAL_ERROR_MCP', `MCP delete failed for ${manualToDelete.manualName}`);
+      } else {
+           addAuditLogEntry('POLICY_MANUAL_DELETED_MCP', `Manual "${manualToDelete.manualName}" deleted from MCP.`);
+      }
+    } catch (error: any) {
+      const errorMsg = `Failed to delete policy manual "${manualToDelete.manualName}" from MCP: ${error.message}`;
+      localSetError(errorMsg);
+      addAuditLogEntry('DELETE_POLICY_MANUAL_ERROR_GENERAL', errorMsg);
     }
     setPolicyManuals(prevManuals => prevManuals.filter(m => m.id !== manualId));
     addAuditLogEntry('POLICY_MANUAL_DELETED_APP', `Policy Manual "${manualToDelete.manualName}" deleted from app.`);
-  }, [policyManuals, mcpClientInstance, addAuditLogEntry, localSetError]);
+  }, [policyManuals, addAuditLogEntry, localSetError]);
 
   const getPolicyManualById = useCallback((manualId: string) => {
     return policyManuals.find(m => m.id === manualId);

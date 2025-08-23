@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from ..config.global_settings import settings
+from ..mcp_intergration.http_api import mcp_router
 from .router import router as ag_ui_router
 
 logging.basicConfig(
@@ -12,35 +13,32 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="SavagelySubtle AI Research Agent - AG-UI Backend",
+    title="SavagelySubtle AI Research Agent - Backend",
     version="1.0.0",
-    description="Acts as a bridge between the Gradio Web UI (using AG-UI protocol) and the ChiefLegalOrchestrator's A2A service.",
+    description="Backend services: AG-UI conversation API and MCP HTTP API.",
 )
 
+# Mount AG-UI only under /ag_ui
 app.include_router(ag_ui_router, prefix="/ag_ui")
-# Also include the router without prefix for the /api endpoints
-app.include_router(ag_ui_router)
+
+# Mount MCP HTTP API at root so existing /api/* paths remain valid
+app.include_router(mcp_router)
 
 
 @app.get("/")
 async def root():
-    return {
-        "message": "AG-UI Backend is running. Connect via WebSocket at /ag_ui/ws/{thread_id}"
-    }
+    return {"message": "Backend running. AG-UI WS at /ag_ui/ws/{thread_id}"}
 
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("AG-UI Backend starting up...")
+    logger.info("Backend starting up...")
     logger.info(
         f"ChiefLegalOrchestrator A2A URL: {settings.CHIEF_LEGAL_ORCHESTRATOR_A2A_URL}"
     )
-    logger.info("AG-UI Backend ready.")
+    logger.info("Backend ready.")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("AG-UI Backend shutting down...")
-
-
-# --- End of src/savagelysubtle_airesearchagent/ag_ui_backend/main.py ---
+    logger.info("Backend shutting down...")

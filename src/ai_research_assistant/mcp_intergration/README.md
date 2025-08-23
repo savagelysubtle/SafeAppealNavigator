@@ -1,14 +1,41 @@
 # MCP Integration for AI Research Assistant
 
-This module provides Model Context Protocol (MCP) integration, allowing agents to automatically receive MCP tools based on configuration.
+This module provides Model Context Protocol (MCP) integration, allowing agents to automatically receive MCP tools based on configuration. The implementation follows proper MCP client patterns using AsyncExitStack and stdio transport.
 
 ## Overview
 
 The MCP integration system:
 1. Reads MCP server configuration from `data/mcp.json`
-2. Connects to MCP servers (stdio or HTTP transport)
-3. Fetches available tools from each server
-4. Automatically distributes tools to agents based on mappings in `agent_mcp_mapping.json`
+2. Connects to MCP servers using proper MCP client patterns
+3. Maintains persistent connections using AsyncExitStack
+4. Fetches available tools from each server
+5. Automatically distributes tools to agents based on mappings in `agent_mcp_mapping.json`
+
+## Key Features
+
+✅ **Proper MCP Client Implementation**: Follows official MCP patterns with AsyncExitStack and stdio transport
+✅ **Persistent Connections**: Maintains stable connections to MCP servers
+✅ **Automatic Tool Discovery**: Discovers and wraps tools from connected servers
+✅ **Agent Integration**: Automatically distributes tools to agents based on configuration
+✅ **Error Handling**: Robust error handling and connection management
+✅ **Resource Management**: Proper cleanup and disconnection handling
+
+## Architecture
+
+### Components
+
+- **MCPServerConnection**: Manages individual server connections using proper MCP patterns
+- **MCPClientManager**: Orchestrates multiple server connections and tool distribution
+- **AsyncExitStack**: Proper resource management for MCP connections
+- **Tool Wrapping**: Automatic conversion of MCP tools to PydanticAI tools
+
+### Connection Lifecycle
+
+1. **Initialization**: Create server parameters and connect using stdio_client
+2. **Session Management**: Use AsyncExitStack to manage ClientSession lifecycle
+3. **Tool Discovery**: List and wrap tools from connected servers
+4. **Persistent Operation**: Maintain connections for agent use
+5. **Cleanup**: Proper disconnection and resource cleanup
 
 ## How It Works
 
@@ -48,6 +75,14 @@ result = await doc_agent.run_skill("Please read the file at /path/to/document.tx
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem@latest", "/path/to/files"],
       "type": "stdio",
+      "enabled": true,
+      "cwd": null,
+      "env": {}
+    },
+    "unified_local_server": {
+      "command": "python",
+      "args": ["-m", "mcp_unified_local_server"],
+      "type": "stdio",
       "enabled": true
     }
   }
@@ -56,14 +91,31 @@ result = await doc_agent.run_skill("Please read the file at /path/to/document.tx
 
 ### Agent Tool Mapping (`src/ai_research_assistant/config/mcp_config/agent_mcp_mapping.json`)
 
-Defines which MCP servers and tools each agent type should receive.
+Defines which MCP servers and tools each agent type should receive:
+
+```json
+{
+  "agent_mcp_mappings": {
+    "DocumentAgent": {
+      "required_servers": ["filesystem", "unified_local_server"],
+      "optional_servers": [],
+      "primary_tools": ["read_file", "write_file", "vector_database"]
+    },
+    "BrowserAgent": {
+      "required_servers": ["filesystem"],
+      "optional_servers": ["unified_local_server"],
+      "primary_tools": ["read_file", "write_file"]
+    }
+  }
+}
+```
 
 ## Key Components
 
-- **MCPClientManager**: Manages MCP server connections and tool distribution
-- **MCPToolWrapper**: Wraps MCP tools to be compatible with PydanticAI
-- **agent_integration.py**: Helper functions for tool injection
-- **base_pydantic_agent.py**: Modified to automatically load MCP tools
+- **MCPServerConnection**: Individual server connection with proper lifecycle management
+- **MCPClientManager**: Central manager for all MCP server connections
+- **Tool Wrapping**: Automatic conversion of MCP tools to PydanticAI compatible tools
+- **Agent Integration**: Seamless integration with existing agent architecture
 
 ## Usage with Settings Page
 
@@ -71,13 +123,9 @@ The React settings page (`frontend/components/pages/SettingsPage.tsx`) can edit 
 
 ## Complete Example
 
-This example shows how agents automatically receive MCP tools based on configuration:
-
 ```python
 """
-Example usage of MCP integration with agents.
-
-This shows how agents automatically receive MCP tools based on configuration.
+Example usage of the new MCP integration with proper patterns.
 """
 
 import asyncio
@@ -99,7 +147,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 async def main():
-    """Example of how agents automatically get MCP tools."""
+    """Example of agents automatically getting MCP tools."""
 
     try:
         # Initialize MCP client manager (happens automatically when first agent is created)
@@ -159,13 +207,33 @@ if __name__ == "__main__":
 ### Running the Example
 
 ```bash
-python -c "
-import asyncio
-import sys
-sys.path.insert(0, 'src')
-from ai_research_assistant.mcp_intergration.README import main
-asyncio.run(main())
-"
+cd src/ai_research_assistant/mcp_intergration
+python README.py  # If you save the example as README.py
 ```
 
-Or create a simple script with the code above and run it directly.
+## Differences from Previous Implementation
+
+The new implementation:
+- Uses proper MCP client patterns with AsyncExitStack
+- Maintains persistent connections instead of short-lived sessions
+- Follows official MCP documentation patterns
+- Provides better error handling and resource management
+- Supports proper connection lifecycle management
+- Fixes issues with session management and tool calling
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Server Connection Failed**: Check that the MCP server command and args are correct
+2. **No Tools Available**: Verify the server is running and responding to tool list requests
+3. **Tool Call Errors**: Ensure the server is still connected and responding
+
+### Debugging
+
+Enable debug logging to see detailed connection and tool call information:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```

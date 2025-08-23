@@ -1,155 +1,13 @@
 """
 Agent Integration for MCP Tools
 
-This module provides helper functions to integrate MCP tools with agents.
+This module provides lightweight helper functions for MCP tool integration with agents.
+Most functionality is now handled by MCPClientManager directly.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
-
-from pydantic_ai.tools import Tool as PydanticAITool
-
-from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
-from ai_research_assistant.mcp_intergration import get_mcp_client_manager
 
 logger = logging.getLogger(__name__)
-
-
-async def inject_mcp_tools_into_agent(
-    agent: BasePydanticAgent, agent_name: Optional[str] = None
-) -> List[PydanticAITool]:
-    """
-    Inject appropriate MCP tools into an agent based on configuration.
-
-    Args:
-        agent: The agent instance to inject tools into
-        agent_name: Optional override for agent name (defaults to agent's class name)
-
-    Returns:
-        List of injected tools
-    """
-    if agent_name is None:
-        agent_name = agent.__class__.__name__
-
-    logger.info(f"Injecting MCP tools into {agent_name}")
-
-    try:
-        # Get MCP client manager
-        mcp_manager = await get_mcp_client_manager()
-
-        # Get tools for this agent
-        mcp_tools = mcp_manager.get_tools_for_agent(agent_name)
-
-        if mcp_tools:
-            # Add tools to agent's tool list
-            if hasattr(agent, "tools") and isinstance(agent.tools, list):
-                agent.tools.extend(mcp_tools)
-                logger.info(
-                    f"Added {len(mcp_tools)} MCP tools to {agent_name}'s tools list"
-                )
-
-            # Note: The pydantic_agent will use the tools from agent.tools when initialized
-            # or when tools are accessed via agent._get_initial_tools()
-
-            logger.info(f"Injected {len(mcp_tools)} MCP tools into {agent_name}")
-        else:
-            logger.info(f"No MCP tools configured for {agent_name}")
-
-        return mcp_tools
-
-    except Exception as e:
-        logger.error(f"Failed to inject MCP tools into {agent_name}: {e}")
-        return []
-
-
-async def get_mcp_tools_for_agent_type(agent_type: str) -> List[PydanticAITool]:
-    """
-    Get MCP tools configured for a specific agent type without injecting them.
-
-    Args:
-        agent_type: Name of the agent type (e.g., 'BrowserAgent', 'DocumentAgent')
-
-    Returns:
-        List of MCP tools configured for this agent type
-    """
-    try:
-        mcp_manager = await get_mcp_client_manager()
-        return mcp_manager.get_tools_for_agent(agent_type)
-    except Exception as e:
-        logger.error(f"Failed to get MCP tools for agent type {agent_type}: {e}")
-        return []
-
-
-async def get_mcp_server_status() -> Dict[str, Any]:
-    """
-    Get the current status of all MCP servers.
-
-    Returns:
-        Dictionary containing server status information
-    """
-    try:
-        mcp_manager = await get_mcp_client_manager()
-        return mcp_manager.get_server_status()
-    except Exception as e:
-        logger.error(f"Failed to get MCP server status: {e}")
-        return {
-            "error": str(e),
-            "configured_servers": 0,
-            "connected_servers": 0,
-            "total_tools": 0,
-            "servers": {},
-        }
-
-
-async def call_mcp_tool_directly(
-    server_name: str, tool_name: str, arguments: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Call an MCP tool directly without going through an agent.
-
-    Args:
-        server_name: Name of the MCP server
-        tool_name: Name of the tool to call
-        arguments: Arguments to pass to the tool
-
-    Returns:
-        Tool execution result
-    """
-    try:
-        mcp_manager = await get_mcp_client_manager()
-        return await mcp_manager.call_tool(server_name, tool_name, arguments)
-    except Exception as e:
-        logger.error(
-            f"Failed to call MCP tool {tool_name} on server {server_name}: {e}"
-        )
-        return {"success": False, "error": str(e)}
-
-
-def get_agent_mcp_mapping() -> Dict[str, Dict[str, Any]]:
-    """
-    Get the agent to MCP server/tool mapping configuration.
-
-    Returns:
-        Dictionary mapping agent names to their MCP configuration
-    """
-    try:
-        import json
-        from pathlib import Path
-
-        mapping_path = (
-            Path(__file__).parent.parent
-            / "config"
-            / "mcp_config"
-            / "agent_mcp_mapping.json"
-        )
-        if mapping_path.exists():
-            with open(mapping_path, "r") as f:
-                data = json.load(f)
-                return data.get("agent_mcp_mappings", {})
-    except Exception as e:
-        logger.error(f"Failed to load agent MCP mapping: {e}")
-
-    return {}
 
 
 # Specialized agent mappings for the AI Research Assistant
@@ -188,3 +46,28 @@ def normalize_agent_name(agent_name: str) -> str:
         Normalized agent name
     """
     return AGENT_TYPE_MAPPINGS.get(agent_name, agent_name)
+
+
+# NOTE: Most MCP functionality is now handled directly by MCPClientManager:
+# - inject_mcp_tools_into_agent() -> Use MCPClientManager.get_tools_for_agent()
+# - get_mcp_tools_for_agent_type() -> Use MCPClientManager.get_tools_for_agent()
+# - get_mcp_server_status() -> Use MCPClientManager.get_server_status()
+# - call_mcp_tool_directly() -> Use MCPClientManager.call_tool()
+# - get_agent_mcp_mapping() -> Handled internally by MCPClientManager
+#
+# See mcp_client_manager.py for the new implementation patterns.
+#
+# To use MCP tools with agents:
+# ```python
+# from ai_research_assistant.mcp_intergration import get_mcp_client_manager
+#
+# # Get tools for an agent
+# mcp_manager = await get_mcp_client_manager()
+# tools = mcp_manager.get_tools_for_agent("DocumentAgent")
+#
+# # Get server status
+# status = mcp_manager.get_server_status()
+#
+# # Call a tool directly
+# result = await mcp_manager.call_tool("server_name", "tool_name", arguments)
+# ```

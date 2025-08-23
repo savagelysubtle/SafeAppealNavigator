@@ -37,6 +37,20 @@ from ai_research_assistant.core.unified_llm_factory import (
 logger = logging.getLogger(__name__)
 
 
+def agent_skill(func):
+    """
+    Decorator to mark agent methods as A2A skills.
+
+    Usage:
+        @agent_skill
+        async def handle_user_request(self, prompt: str) -> TaskResult:
+            ...
+    """
+    func._is_agent_skill = True
+    func._skill_name = func.__name__
+    return func
+
+
 class BasePydanticAgent:
     """
     Base class for all Pydantic AI-centric agents in the ai_research_assistant project.

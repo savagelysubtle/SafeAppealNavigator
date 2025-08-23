@@ -4,7 +4,7 @@
 
 ## Layers
 
-1.  **UI** – Gradio ↔ AG-UI backend (FastAPI).
+1.  **UI** – ./frontend ↔ AG-UI backend (FastAPI).
 2.  **CEO Agent** – Vorder-facing chatbot, no heavy lifting.
 3.  **Orchestrator Agent** – Runs TaskGraph, publishes A2A `/ask|/tell|/stream`.
 4.  **Specialized Manager Layer**

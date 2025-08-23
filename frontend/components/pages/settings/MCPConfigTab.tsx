@@ -24,10 +24,44 @@ const MCPConfigTab: React.FC = () => {
   const [editingServer, setEditingServer] = useState<string | null>(null);
   const [newServerName, setNewServerName] = useState('');
   const [showAddServer, setShowAddServer] = useState(false);
+  const [rawConfigText, setRawConfigText] = useState('');
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [isEditingRaw, setIsEditingRaw] = useState(false);
 
   useEffect(() => {
     loadMCPConfig();
   }, []);
+
+  // Poll for external changes when autoRefresh is enabled
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const id = setInterval(async () => {
+      if (isEditingRaw || isSaving) return;
+      try {
+        const response = await fetch('http://localhost:10200/api/mcp-config');
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (payload.success && typeof payload.updatedAt === 'number') {
+          if (!updatedAt || payload.updatedAt > updatedAt) {
+            setUpdatedAt(payload.updatedAt);
+            if (typeof payload.config === 'string') {
+              setRawConfigText(payload.config);
+              try {
+                const parsed = JSON.parse(payload.config);
+                setMcpConfig(parsed);
+              } catch {
+                // ignore parse errors on auto-refresh
+              }
+            }
+          }
+        }
+      } catch {
+        // silent
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [autoRefresh, isEditingRaw, isSaving, updatedAt]);
 
   const loadMCPConfig = async () => {
     setIsLoading(true);
@@ -35,9 +69,16 @@ const MCPConfigTab: React.FC = () => {
       const response = await fetch('http://localhost:10200/api/mcp-config');
       if (response.ok) {
         const configText = await response.text();
-        const config = JSON.parse(configText);
-        setMcpConfig(config);
-        addAuditLogEntry('MCP_CONFIG_LOADED', 'MCP configuration loaded successfully');
+        const payload = JSON.parse(configText);
+        if (payload.success && payload.config) {
+          const parsed = JSON.parse(payload.config);
+          setMcpConfig(parsed);
+          setRawConfigText(payload.config);
+          if (typeof payload.updatedAt === 'number') setUpdatedAt(payload.updatedAt);
+          addAuditLogEntry('MCP_CONFIG_LOADED', 'MCP configuration loaded successfully');
+        } else {
+          throw new Error(payload.message || 'Failed to load MCP configuration');
+        }
       } else {
         throw new Error('Failed to load MCP configuration');
       }
@@ -54,12 +95,18 @@ const MCPConfigTab: React.FC = () => {
       const response = await fetch('http://localhost:10200/api/mcp-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: JSON.stringify(mcpConfig, null, 2) })
+        body: JSON.stringify({ config: rawConfigText || JSON.stringify(mcpConfig, null, 2) })
       });
 
       if (response.ok) {
-        addAuditLogEntry('MCP_CONFIG_SAVED', 'MCP configuration saved successfully');
-        setError(null);
+        const payload = await response.json();
+        if (payload.success) {
+          addAuditLogEntry('MCP_CONFIG_SAVED', 'MCP configuration saved successfully');
+          setError(null);
+          if (typeof payload.updatedAt === 'number') setUpdatedAt(payload.updatedAt);
+        } else {
+          throw new Error(payload.message || 'Failed to save MCP configuration');
+        }
       } else {
         throw new Error('Failed to save MCP configuration');
       }
@@ -71,20 +118,26 @@ const MCPConfigTab: React.FC = () => {
   };
 
   const handleServerUpdate = (serverId: string, updates: Partial<MCPServer>) => {
-    setMcpConfig(prev => ({
-      mcpServers: {
-        ...prev.mcpServers,
-        [serverId]: {
-          ...prev.mcpServers[serverId],
-          ...updates
+    setMcpConfig(prev => {
+      const next = {
+        mcpServers: {
+          ...prev.mcpServers,
+          [serverId]: {
+            ...prev.mcpServers[serverId],
+            ...updates
+          }
         }
-      }
-    }));
+      };
+      setRawConfigText(JSON.stringify(next, null, 2));
+      return next;
+    });
   };
 
   const handleDeleteServer = (serverId: string) => {
     const { [serverId]: deleted, ...remaining } = mcpConfig.mcpServers;
-    setMcpConfig({ mcpServers: remaining });
+    const next = { mcpServers: remaining };
+    setMcpConfig(next);
+    setRawConfigText(JSON.stringify(next, null, 2));
     addAuditLogEntry('MCP_SERVER_DELETED', `Deleted MCP server: ${serverId}`);
   };
 
@@ -99,17 +152,21 @@ const MCPConfigTab: React.FC = () => {
       return;
     }
 
-    setMcpConfig(prev => ({
-      mcpServers: {
-        ...prev.mcpServers,
-        [newServerName]: {
-          id: newServerName,
-          command: '',
-          type: 'stdio',
-          enabled: true
+    setMcpConfig(prev => {
+      const next = {
+        mcpServers: {
+          ...prev.mcpServers,
+          [newServerName]: {
+            id: newServerName,
+            command: '',
+            type: 'stdio',
+            enabled: true
+          }
         }
-      }
-    }));
+      };
+      setRawConfigText(JSON.stringify(next, null, 2));
+      return next;
+    });
 
     setNewServerName('');
     setShowAddServer(false);
@@ -149,6 +206,45 @@ const MCPConfigTab: React.FC = () => {
             {isSaving ? <LoadingSpinner size="sm" /> : 'Save Configuration'}
           </button>
         </div>
+      </div>
+
+      {/* Raw JSON Editor */}
+      <div className="mb-6 p-4 bg-background border border-border rounded-lg">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-medium text-textPrimary">Raw mcp.json</h3>
+          <div className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
+              Auto-refresh
+            </label>
+            <button
+              onClick={loadMCPConfig}
+              className="px-3 py-1 bg-secondary text-white rounded hover:bg-secondary-dark transition-colors"
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+        <textarea
+          value={rawConfigText}
+          onChange={(e) => { setIsEditingRaw(true); setRawConfigText(e.target.value); }}
+          onBlur={() => {
+            setIsEditingRaw(false);
+            try {
+              const parsed = JSON.parse(rawConfigText);
+              setMcpConfig(parsed);
+              setError(null);
+            } catch (err) {
+              setError('Invalid JSON in raw editor');
+            }
+          }}
+          rows={14}
+          className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+          placeholder='{"mcpServers": { ... }}'
+        />
+        {updatedAt && (
+          <p className="mt-2 text-xs text-textSecondary">Last updated: {new Date(updatedAt * 1000).toLocaleString()}</p>
+        )}
       </div>
 
       {/* Add Server Dialog */}
@@ -317,7 +413,7 @@ const MCPConfigTab: React.FC = () => {
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const blob = new Blob([JSON.stringify(mcpConfig, null, 2)], { type: 'application/json' });
+              const blob = new Blob([rawConfigText || JSON.stringify(mcpConfig, null, 2)], { type: 'application/json' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -340,8 +436,10 @@ const MCPConfigTab: React.FC = () => {
                   const reader = new FileReader();
                   reader.onload = (e) => {
                     try {
-                      const config = JSON.parse(e.target?.result as string);
+                      const text = e.target?.result as string;
+                      const config = JSON.parse(text);
                       setMcpConfig(config);
+                      setRawConfigText(JSON.stringify(config, null, 2));
                       addAuditLogEntry('MCP_CONFIG_IMPORTED', 'MCP configuration imported from file');
                     } catch (error) {
                       setError('Invalid configuration file');
