@@ -69,3 +69,6 @@ line-length = 88
 
 [tool.ty.src]
 root = "./src"
+
+[tool.uv.sources]
+src = { path = "./src" }
