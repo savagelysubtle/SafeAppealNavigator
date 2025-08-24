@@ -376,3 +376,15 @@ class ComprehensiveResearchResult(BaseModel):
     generation_time_seconds: Optional[float] = Field(
         default=None, description="Time taken for querying and synthesis."
     )
+
+
+# --- Resource Manager Models (Placeholder) ---
+# Added to resolve dependency for core/resource_manager.py
+class AgentTask(BaseModel):
+    """Represents a task to be executed by an agent."""
+
+    id: UUID = Field(default_factory=uuid4)
+    task_type: str
+    parameters: Dict[str, Any]
+    priority: int = 1
+    parent_workflow_id: Optional[str] = None

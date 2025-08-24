@@ -16,6 +16,11 @@ class CEOAgentConfig(BasePydanticAgentConfig):
     agent_name: str = "CEOAgent"
     agent_id: str = "ceo_agent_001"
 
+    # --- ADDED DEFAULT MODEL ---
+    # This ensures the agent can initialize its LLM factory.
+    llm_model_name: str = "gemini-1.5-flash"
+    # --- END CORRECTION ---
+
     pydantic_ai_system_prompt: str = (
         "You are the CEO Agent. Your role is to understand the user's request, "
         "clarify it if necessary, and then delegate the task to your direct report, the Orchestrator Agent. "
