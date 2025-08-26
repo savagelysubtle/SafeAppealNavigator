@@ -58,7 +58,7 @@ class OrchestratorAgent(BasePydanticAgent):
             print("=" * 62 + "\n")
             # --- END LOGGING ---
 
-            result = await self.pydantic_agent.run(user_prompt=execution_prompt)
+            result = await self.pydantic_agent.run(execution_prompt)
 
             final_answer = result.output
 

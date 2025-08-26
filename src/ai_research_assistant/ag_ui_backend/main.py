@@ -3,7 +3,9 @@ import logging
 from fastapi import FastAPI
 
 from ..config.global_settings import settings
-from ..mcp_intergration.http_api import mcp_router
+
+# TODO: Add MCP HTTP API router when implemented
+# from ..mcp.http_api import mcp_router
 from .router import router as ag_ui_router
 
 logging.basicConfig(
@@ -21,8 +23,8 @@ app = FastAPI(
 # Mount AG-UI only under /ag_ui
 app.include_router(ag_ui_router, prefix="/ag_ui")
 
-# Mount MCP HTTP API at root so existing /api/* paths remain valid
-app.include_router(mcp_router)
+# TODO: Mount MCP HTTP API at root when implemented
+# app.include_router(mcp_router)
 
 
 @app.get("/")

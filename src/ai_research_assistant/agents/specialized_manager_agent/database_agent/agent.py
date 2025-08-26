@@ -2,8 +2,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from pydantic_ai.tools import Tool as PydanticAITool
-
 from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
@@ -32,10 +30,6 @@ class DatabaseAgent(BasePydanticAgent):
         super().__init__(config=config or DatabaseAgentConfig())
         self.agent_config: DatabaseAgentConfig = self.config  # type: ignore
         logger.info(f"DatabaseAgent '{self.agent_name}' initialized with Chroma tools.")
-
-    def _get_initial_tools(self) -> List[PydanticAITool]:
-        """Get MCP tools from parent class - will automatically get Chroma tools."""
-        return super()._get_initial_tools()
 
     async def intake_documents(
         self,

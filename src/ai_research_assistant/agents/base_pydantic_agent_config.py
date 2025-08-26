@@ -13,14 +13,14 @@ class BasePydanticAgentConfig(BaseModel):
     agent_id: str = Field(description="Unique identifier for the agent.")
     agent_name: str = Field(description="Human-readable name for the agent.")
 
-    # The pydantic-ai library expects the string format "google:<model_name>"
+    # --- DEFINITIVE FIX: Use the correct provider key for pydantic-ai ---
+    # The library expects the string format "google:<model_name>" for this provider.
     llm_provider: str = Field(
         default="google",
         description="LLM provider key (e.g., 'openai', 'google', 'anthropic').",
     )
 
-    # --- DEFINITIVE FIX: Use the stable and highly compatible gemini-1.5-flash model ---
-    # This avoids the "UNEXPECTED_TOOL_CALL" edge case from the pro model.
+    # Use the stable and highly compatible gemini-1.5-flash model
     llm_model_name: Optional[str] = Field(
         default="gemini-1.5-flash", description="Specific model name for the provider."
     )

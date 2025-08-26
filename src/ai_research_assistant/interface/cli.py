@@ -1,115 +1,262 @@
-# src/ai_research_assistant/interface/cli.py
+#!/usr/bin/env python
+"""
+SafeAppealNavigator - Interactive Debug CLI (Corrected Pathing)
+
+This script provides a robust, interactive command-line interface to test the entire
+multi-agent system. It correctly starts, manages, and cleans up all necessary
+backend services (MCP Server, A2A Agents) and allows you to communicate directly
+with the Orchestrator agent to trace the full workflow.
+
+This version includes a robust path-finding mechanism that works reliably
+when run from the project root.
+"""
+
+import asyncio
 import logging
 import os
 import signal
+import subprocess
 import sys
-from contextlib import AsyncExitStack
+import uuid
 from pathlib import Path
 
 import anyio
+import httpx
+from dotenv import load_dotenv
 
-# --- Path Setup ---
+
+# --- Robust Project Setup ---
+def find_project_root(start_path: Path, marker: str = "pyproject.toml") -> Path:
+    """Traverse upwards from start_path to find the project root."""
+    current_path = start_path.resolve()
+    while current_path != current_path.parent:  # Stop at the filesystem root
+        if (current_path / marker).exists():
+            return current_path
+        current_path = current_path.parent
+    raise FileNotFoundError(
+        f"Project root with marker '{marker}' not found starting from {start_path}."
+    )
+
+
 try:
-    script_path = Path(__file__).resolve()
-    src_path = script_path.parent.parent.parent
-    project_root = src_path.parent
-    if not src_path.is_dir():
-        raise FileNotFoundError(f"The 'src' directory was not found at {src_path}")
-    if str(src_path) not in sys.path:
-        sys.path.insert(0, str(src_path))
+    # Find the project root dynamically, starting from this script's location
+    PROJECT_ROOT = find_project_root(Path(__file__))
+    SRC_PATH = PROJECT_ROOT / "src"
+    if not SRC_PATH.is_dir():
+        raise FileNotFoundError(f"The 'src' directory was not found at {SRC_PATH}")
+    # Add the 'src' directory to the Python path for reliable imports
+    sys.path.insert(0, str(SRC_PATH))
+    load_dotenv(PROJECT_ROOT / ".env")
 except Exception as e:
     print(f"FATAL ERROR: Could not set up the Python path. {e}", file=sys.stderr)
     sys.exit(1)
 
-from dotenv import load_dotenv
-
-load_dotenv(project_root / ".env")
-
 # --- Application Imports ---
-from ai_research_assistant.agents.ceo_agent.agent import CEOAgent
-from ai_research_assistant.core.unified_llm_factory import get_llm_factory
-from ai_research_assistant.mcp.client import create_mcp_toolsets_from_config
+# No longer needed: from ai_research_assistant.core.models import MessageEnvelope, SkillInvocation
 
-# --- Configure Logging & Process Management ---
+# --- Configuration ---
+LOG_DIR = PROJECT_ROOT / "tmp" / "cli_logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
     format="%(asctime)s - %(levelname)-8s - %(name)-25s - %(message)s",
     stream=sys.stdout,
 )
-logger = logging.getLogger("CLIRunner")
+logger = logging.getLogger("DebugCLI")
+
+# --- Service Definitions ---
+SERVICES = {
+    "mcp_server": {
+        "command": [
+            sys.executable,
+            "-m",
+            "ai_research_assistant.mcp.server",
+            "--port",
+            "10100",
+            "--transport",
+            "sse",
+        ],
+        "log_file": LOG_DIR / "mcp_server.log",
+        "ready_msg": "Agent Finder MCP Server running",
+    },
+    "orchestrator": {
+        "command": [
+            sys.executable,
+            "-m",
+            "ai_research_assistant.a2a_services.startup",
+            "--card-path",
+            str(PROJECT_ROOT / "agent_cards/orchestrator_agent.json"),
+            "--port",
+            "10101",
+        ],
+        "log_file": LOG_DIR / "orchestrator_agent.log",
+        "url": "http://localhost:10101",
+    },
+    "document_agent": {
+        "command": [
+            sys.executable,
+            "-m",
+            "ai_research_assistant.a2a_services.startup",
+            "--card-path",
+            str(PROJECT_ROOT / "agent_cards/document_agent.json"),
+            "--port",
+            "10102",
+        ],
+        "log_file": LOG_DIR / "document_agent.log",
+    },
+    "browser_agent": {
+        "command": [
+            sys.executable,
+            "-m",
+            "ai_research_assistant.a2a_services.startup",
+            "--card-path",
+            str(PROJECT_ROOT / "agent_cards/browser_agent.json"),
+            "--port",
+            "10103",
+        ],
+        "log_file": LOG_DIR / "browser_agent.log",
+    },
+    "database_agent": {
+        "command": [
+            sys.executable,
+            "-m",
+            "ai_research_assistant.a2a_services.startup",
+            "--card-path",
+            str(PROJECT_ROOT / "agent_cards/database_agent.json"),
+            "--port",
+            "10104",
+        ],
+        "log_file": LOG_DIR / "database_agent.log",
+    },
+}
+
+# --- Process Management ---
 processes = []
 
 
 def cleanup_processes(signum=None, frame=None):
-    # ... (function is unchanged)
-    pass
+    """Gracefully terminate all running background services."""
+    logger.warning("Shutting down background services...")
+    for p, name in processes:
+        try:
+            if p.poll() is None:
+                logger.info(f"Terminating {name} (PID: {p.pid})...")
+                if os.name != "nt":
+                    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+                else:
+                    p.terminate()
+                p.wait(timeout=5)
+        except ProcessLookupError:
+            logger.info(f"Process {name} (PID: {p.pid}) already terminated.")
+        except Exception as e:
+            logger.error(f"Error terminating {name}, attempting to kill. Error: {e}")
+            try:
+                p.kill()
+            except Exception as kill_e:
+                logger.error(f"Failed to kill {name}: {kill_e}")
+    logger.info("Cleanup complete.")
 
 
-signal.signal(signal.SIGINT, cleanup_processes)
-signal.signal(signal.SIGTERM, cleanup_processes)
+def start_service(name, config):
+    """Starts a service as a background process and logs its output."""
+    logger.info(f"Starting {name}...")
+    log_file = open(config["log_file"], "w")
+    preexec_fn = os.setsid if os.name != "nt" else None
 
-# ... (start_a2a_service function is unchanged)
+    # Use the project root as the current working directory for all subprocesses
+    process = subprocess.Popen(
+        config["command"],
+        stdout=log_file,
+        stderr=log_file,
+        preexec_fn=preexec_fn,
+        cwd=PROJECT_ROOT,
+    )
+    processes.append((process, name))
+    logger.info(
+        f"  -> {name} started with PID {process.pid}. Log: {config['log_file']}"
+    )
+    return process
 
 
-async def main():
-    """The main asynchronous function to run the CLI test harness."""
-    print("\n--- ⚖️ SafeAppealNavigator CLI Test Runner ---")
+async def talk_to_orchestrator(prompt: str):
+    """Sends a prompt to the Orchestrator agent using A2A protocol and returns the response."""
+    orchestrator_url = SERVICES["orchestrator"]["url"]
+
+    # Use proper A2A protocol message format
+    a2a_message = {
+        "context_id": str(uuid.uuid4()),
+        "message": prompt,
+        "user_id": "debug_cli",
+    }
 
     try:
-        logger.info("Creating MCP toolsets from data/mcp.json...")
-        mcp_toolsets = create_mcp_toolsets_from_config()
-
-        async with AsyncExitStack() as stack:
-            for toolset in mcp_toolsets:
-                await stack.enter_async_context(toolset)
-
-            logger.info(
-                f"{len(mcp_toolsets)} MCP server(s) started and managed by pydantic-ai."
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            # Send to the A2A endpoint which should be at the root path
+            response = await client.post(
+                orchestrator_url,
+                json=a2a_message,
+                headers={"Content-Type": "application/json"},
             )
+            response.raise_for_status()
+            return response.text
 
-            # --- DEFINITIVE FIX: Create and inject the pydantic-ai Model object ---
-            logger.info("Initializing LLM instance from factory...")
-            llm_factory = get_llm_factory()
-            # This now returns a pydantic_ai.models.GoogleModel object
-            llm_instance = llm_factory.create_llm_from_config(
-                {
-                    "provider": "google",
-                    "model_name": "gemini-2.5-pro",
-                }
-            )
-
-            logger.info("Initializing CEO Agent with LLM and active MCP toolsets...")
-            ceo_agent = CEOAgent(llm_instance=llm_instance, toolsets=mcp_toolsets)
-
-            print("\n--- ✅ Agent system is ready. ---")
-            print("You are now chatting with the CEO Agent.")
-            print("Type 'quit' or 'exit' to stop the application.")
-            print("-" * 40)
-
-            while True:
-                user_input = await anyio.to_thread.run_sync(
-                    lambda: input("You: ").strip()
-                )
-                if user_input.lower() in ["quit", "exit"]:
-                    break
-                if not user_input:
-                    continue
-
-                print("\nCEO is thinking...")
-                response = await ceo_agent.handle_user_request(user_prompt=user_input)
-
-                print("\n" + "-" * 40)
-                print(f"CEO: {response}")
-                print("-" * 40)
-
-        logger.info("MCP toolset context exited, servers shut down.")
-
+    except httpx.HTTPStatusError as e:
+        error_body = e.response.text
+        logger.error(
+            f"HTTP Error from Orchestrator: {e.response.status_code} - {error_body}"
+        )
+        return f"Error: Received status {e.response.status_code} from the orchestrator."
+    except httpx.RequestError as e:
+        logger.error(
+            f"Could not connect to the Orchestrator at {orchestrator_url}: {e}"
+        )
+        return "Error: Could not connect to the orchestrator. Is it running?"
     except Exception as e:
-        logger.error("A critical error occurred during the CLI session.", exc_info=True)
-        print(f"\n💥 An unrecoverable error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}", exc_info=True)
+        return f"An unexpected error occurred: {str(e)}"
+
+
+# --- Main Application ---
+async def main():
+    """Main asynchronous function to run the CLI test harness."""
+    print("\n--- ⚖️  SafeAppealNavigator Interactive Debug CLI ---")
+    print(f"INFO: Project Root detected at: {PROJECT_ROOT}")
+    print(f"INFO: Logs for all services will be stored in: {LOG_DIR.resolve()}")
+
+    signal.signal(signal.SIGINT, cleanup_processes)
+    signal.signal(signal.SIGTERM, cleanup_processes)
+
+    try:
+        for name, config in SERVICES.items():
+            start_service(name, config)
+
+        print("\n--- ✅ All backend services are starting... ---")
+        await asyncio.sleep(10)
+
+        print("\n--- 🗣️  You are now talking to the Orchestrator Agent ---")
+        print("Type your research request or 'quit'/'exit' to stop.")
+        print("-" * 50)
+
+        while True:
+            user_input = await anyio.to_thread.run_sync(lambda: input("You: ").strip())
+
+            if user_input.lower() in ["quit", "exit"]:
+                break
+            if not user_input:
+                continue
+
+            print("\nOrchestrator is thinking...")
+            print("(Check the log files for real-time agent activity)")
+
+            response = await talk_to_orchestrator(user_input)
+
+            print("\n" + "-" * 50)
+            print(f"Orchestrator: {response}")
+            print("-" * 50)
+
     finally:
         cleanup_processes()
-        logger.info("Shutdown complete.")
         print("\n--- Application has been shut down. ---")
 
 
@@ -117,6 +264,4 @@ if __name__ == "__main__":
     try:
         anyio.run(main)
     except KeyboardInterrupt:
-        print("\nCLI interrupted by user. Shutting down.")
-    finally:
-        cleanup_processes()
+        logger.info("CLI interrupted by user.")

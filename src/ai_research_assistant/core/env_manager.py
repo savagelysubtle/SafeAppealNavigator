@@ -112,7 +112,7 @@ class EnvironmentManager:
         # Get all configured environment variables for this provider
         for config_key, env_var in provider_config.items():
             value = os.getenv(env_var)
-            if value:
+            if value is not None:  # Include empty strings, exclude None
                 config[config_key] = value
 
         return config
@@ -152,8 +152,12 @@ class EnvironmentManager:
 
     def get_browser_config(self) -> Dict[str, Any]:
         """Get browser-specific configuration"""
+        # Parse headless value to handle various truthy/falsy values
+        headless_value = os.getenv("BROWSER_HEADLESS", "true").lower()
+        headless = headless_value in ("true", "1", "yes", "on")
+
         return {
-            "headless": os.getenv("BROWSER_HEADLESS", "true").lower() == "true",
+            "headless": headless,
             "viewport_width": int(os.getenv("BROWSER_VIEWPORT_WIDTH", "1920")),
             "viewport_height": int(os.getenv("BROWSER_VIEWPORT_HEIGHT", "1080")),
             "user_agent": os.getenv("BROWSER_USER_AGENT"),

@@ -21,11 +21,11 @@ class CEOAgent(BasePydanticAgent):
 
     def __init__(
         self,
-        llm_instance: Any,  # --- DEFINITIVE FIX: Accept the LLM instance ---
+        llm_instance: Optional[Any] = None,
         config: Optional[CEOAgentConfig] = None,
         toolsets: Optional[List[MCPServer]] = None,
     ):
-        # Pass the LLM instance to the base class
+        # The base class now handles everything with just the config and toolsets.
         super().__init__(
             config=config or CEOAgentConfig(),
             llm_instance=llm_instance,
@@ -33,10 +33,10 @@ class CEOAgent(BasePydanticAgent):
         )
         self.config: CEOAgentConfig = self.config  # type: ignore
 
-        # Pass the same LLM instance to the Orchestrator it creates
+        # Pass the same toolsets to the Orchestrator it creates
         self.orchestrator = OrchestratorAgent(
-            config=OrchestratorAgentConfig(),
             llm_instance=llm_instance,
+            config=OrchestratorAgentConfig(),
             toolsets=toolsets,
         )
 

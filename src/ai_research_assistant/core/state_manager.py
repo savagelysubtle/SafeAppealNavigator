@@ -28,7 +28,7 @@ class AgentStateManager:
             self._connection_pool = await aiosqlite.connect(self.db_path)
             self._connection_pool.row_factory = aiosqlite.Row
             await self._create_schema()
-            logger.info(f"Initialized AgentStateManager with database: {self.db_path}")
+            logger.info(f"Initialized AgentStateManager with {self.db_path}")
 
     def _ensure_db_directory(self) -> None:
         """Ensures the database directory exists."""
@@ -89,6 +89,10 @@ class AgentStateManager:
                 "Database connection not initialized. Call initialize() first."
             )
 
+        # Handle days_back=0 case - return empty results immediately
+        if days_back <= 0:
+            return []
+
         query = "SELECT * FROM agent_metrics WHERE timestamp > ?"
         params: List[Any] = [datetime.now() - timedelta(days=days_back)]
 
@@ -109,4 +113,10 @@ class AgentStateManager:
         if self._connection_pool:
             await self._connection_pool.close()
             self._connection_pool = None
-            logger.info("AgentStateManager database connection closed.")
+            # Add a small delay on Windows to ensure file handle is released
+            import asyncio
+            import platform
+
+            if platform.system() == "Windows":
+                await asyncio.sleep(0.01)
+            logger.info("database connection closed")

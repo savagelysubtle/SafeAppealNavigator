@@ -422,6 +422,14 @@ def create_rate_limiter(
     }
 
     config_defaults = provider_configs.get(provider, {})
+    # Only use provider default for requests_per_minute if not explicitly provided
+    if requests_per_minute == 60:  # Default value
+        requests_per_minute = config_defaults.get("requests_per_minute", 60)
+
+    # Remove requests_per_minute from config_defaults to avoid conflict
+    config_defaults = {
+        k: v for k, v in config_defaults.items() if k != "requests_per_minute"
+    }
     config_defaults.update(kwargs)
 
     config = RateLimitConfig(

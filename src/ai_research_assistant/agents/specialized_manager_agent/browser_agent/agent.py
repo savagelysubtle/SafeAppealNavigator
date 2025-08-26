@@ -1,19 +1,18 @@
 # src/ai_research_assistant/agents/specialized_manager_agent/browser_agent/agent.py
 import logging
-import uuid
 from typing import Any, Dict, List, Optional
 
-from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
+from pydantic_ai.mcp import MCPServer
+
+from ai_research_assistant.agents.base_pydantic_agent import (
+    BasePydanticAgent,
+    agent_skill,
+)
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
 )
-
-# --- CORRECTED IMPORT ---
-# Removed the old import from core.mcp_client
-# --- END CORRECTION ---
 from ai_research_assistant.core.models import (
-    LegalResearchFindingsSummary,
-    ResearchFinding,
+    ConductComprehensiveResearchInput,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,69 +23,82 @@ class BrowserAgentConfig(BasePydanticAgentConfig):
 
     agent_name: str = "BrowserAgent"
     agent_id: str = "browser_agent_instance_001"
-    # Provide a default model for this agent if not specified elsewhere
-    llm_model_name: str = "gemini-1.5-flash"
+
+    # This prompt is crucial. It tells the agent what its purpose is and hints at the tools it should use.
     pydantic_ai_system_prompt: str = (
-        "You are a Browser Agent. Your role is to conduct comprehensive research based on provided keywords and case context. "
-        "This involves performing web searches and scraping websites like WCAT decisions. "
-        "You will use available tools for web searching and data access. "
-        "Summarize your findings and provide key insights."
+        "You are a specialized Browser Agent. Your role is to conduct comprehensive research on the internet. "
+        "You must use the available tools, such as 'brave-search_search' for web searches and 'playwright' tools for navigating web pages, "
+        "to gather information based on the user's request. Synthesize the findings into a clear summary."
     )
 
 
 class BrowserAgent(BasePydanticAgent):
-    """Agent responsible for web browsing, searching, and scraping."""
+    """
+    A specialized agent for browsing the web and conducting research using MCP tools.
+    """
 
-    def __init__(self, config: Optional[BrowserAgentConfig] = None):
-        super().__init__(config=config or BrowserAgentConfig())
-        self.agent_config: BrowserAgentConfig = self.config  # type: ignore
+    def __init__(
+        self,
+        config: Optional[BrowserAgentConfig] = None,
+        toolsets: Optional[List[MCPServer]] = None,
+    ) -> None:
+        """Initializes the BrowserAgent, passing toolsets to the base class."""
+        super().__init__(config=config or BrowserAgentConfig(), toolsets=toolsets)
+        self.config: BrowserAgentConfig = self.config  # type: ignore
         logger.info(f"BrowserAgent '{self.agent_name}' initialized.")
 
-    # --- CORRECTED METHOD ---
-    # This method is no longer needed, as the BasePydanticAgent's `initialize_mcp_tools`
-    # now handles all tool loading. We can remove it to simplify the class.
-    # def _get_initial_tools(self) -> List[PydanticAITool]:
-    #     return super()._get_initial_tools()
-    # --- END CORRECTION ---
+    # The obsolete `_get_initial_tools` method has been removed.
 
+    @agent_skill
     async def conduct_comprehensive_research(
         self,
         search_keywords: List[str],
         case_context: str,
         research_depth: str = "moderate",
         sources_to_include: Optional[List[str]] = None,
-        max_results_per_source: int = 10,
     ) -> Dict[str, Any]:
         """
-        Conducts comprehensive research using web search and scraping tools.
-        NOTE: This is a placeholder and returns mocked data.
+        Conducts comprehensive research using web search and scraping tools
+        by invoking the internal pydantic-ai agent.
         """
+        try:
+            # Validate input using our Pydantic model
+            input_data = ConductComprehensiveResearchInput(
+                search_keywords=search_keywords,
+                case_context=case_context,
+                research_depth=research_depth,
+                sources_to_include=sources_to_include or [],
+            )
+        except Exception as e:
+            logger.error(f"Invalid input for research skill: {e}")
+            return {"error": f"Invalid input provided: {e}"}
+
         logger.info(
-            f"Conducting research for context: '{case_context[:100]}...' with keywords: {search_keywords}"
+            f"Conducting research for context: '{input_data.case_context[:100]}...' with keywords: {input_data.search_keywords}"
         )
 
-        # Mocked response for demonstration purposes
-        all_findings = [
-            ResearchFinding(
-                source_name="MockWebSearch",
-                title="Mock Web Result 1",
-                url="http://example.com/web1",
-                snippet="Relevant finding from web.",
-            ),
-            ResearchFinding(
-                source_name="MockWCATSearch",
-                title="WCAT Decision XYZ",
-                url="http://wcat.example/xyz",
-                snippet="Key WCAT decision summary.",
-            ),
-        ]
-
-        summary_output = LegalResearchFindingsSummary(
-            research_query_summary=f"Keywords: {search_keywords}, Context: {case_context[:100]}...",
-            findings=all_findings,
-            overall_summary=f"Mock research for '{case_context[:50]}...' yielded {len(all_findings)} findings.",
-            key_insights=["Mock Insight A", "Mock Insight B"],
-            mcp_path_to_full_report=f"/mcp/reports/{uuid.uuid4()}/research_report.json",
+        # Construct a detailed prompt for the LLM, instructing it on how to use its tools.
+        # The tools will be automatically available to the agent (e.g., brave-search_search).
+        prompt_for_llm = (
+            f"Perform a {input_data.research_depth} research task. "
+            f"The case context is: '{input_data.case_context}'. "
+            f"Start by using the 'brave-search_search' tool with the following keywords: {', '.join(input_data.search_keywords)}. "
+            f"If you find relevant URLs, use the 'playwright_navigate' and 'playwright_get_content' tools to read their content. "
+            "Synthesize all the information you find into a comprehensive summary and identify key insights."
         )
 
-        return summary_output.model_dump(exclude_none=True)
+        try:
+            # Run the task using the internal pydantic_agent
+            result = await self.pydantic_agent.run(user_prompt=prompt_for_llm)
+
+            # For now, we return the direct output. In a more advanced implementation,
+            # you would parse this output into the LegalResearchFindingsSummary model.
+            return {
+                "status": "success",
+                "summary": result.output,
+                "ran_tools": result.ran_tools,
+            }
+
+        except Exception as e:
+            logger.error(f"Error during browser agent research: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}

@@ -177,6 +177,8 @@ GOOGLE_MODEL_OPTIONS = {
         "context_window": 1048576,
         "max_output_tokens": 8192,
         "capabilities": ["live_api", "audio_generation", "function_calling"],
+        "input_types": ["audio", "video", "text"],
+        "output_types": ["text", "audio"],
     },
     # Gemini 1.5 models (Stable)
     "gemini-1.5-pro": {

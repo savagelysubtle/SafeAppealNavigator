@@ -1,4 +1,4 @@
-# File: src/ai_research_assistant/a2a_services/startup.py
+# src/ai_research_assistant/a2a_services/startup.py
 import argparse
 import json
 import logging
@@ -8,7 +8,7 @@ from typing import Any, Dict
 import uvicorn
 from dotenv import load_dotenv
 
-# --- FIX: Direct imports to break circular dependency ---
+# --- Agent Imports ---
 from ai_research_assistant.agents.orchestrator_agent.agent import OrchestratorAgent
 from ai_research_assistant.agents.orchestrator_agent.config import (
     OrchestratorAgentConfig,
@@ -25,6 +25,9 @@ from ai_research_assistant.agents.specialized_manager_agent.document_agent.agent
     DocumentAgent,
     DocumentAgentConfig,
 )
+
+# --- FIX: Import the LLM factory ---
+from ai_research_assistant.core.unified_llm_factory import get_llm_factory
 from ai_research_assistant.mcp.client import create_mcp_toolsets_from_config
 
 from .fasta2a_wrapper import wrap_agent_with_fasta2a
@@ -34,7 +37,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# --- FIX: Agent registry is now defined directly in the startup script ---
 AGENT_REGISTRY: Dict[str, Dict[str, Any]] = {
     "OrchestratorAgent": {
         "agent_class": OrchestratorAgent,
@@ -103,7 +105,25 @@ def main():
         mcp_toolsets = create_mcp_toolsets_from_config()
 
         agent_config = ConfigClass()
-        agent_instance = AgentClass(config=agent_config, toolsets=mcp_toolsets)
+
+        # --- FIX: Create the LLM instance before creating the agent ---
+        logger.info(f"Creating LLM instance for {agent_name}...")
+        llm_factory = get_llm_factory()
+        llm_instance = llm_factory.create_llm_from_config(
+            {
+                "provider": agent_config.llm_provider,
+                "model_name": agent_config.llm_model_name,
+            }
+        )
+        # --- END FIX ---
+
+        # --- FIX: Inject the llm_instance into the agent's constructor ---
+        agent_instance = AgentClass(
+            config=agent_config,
+            llm_instance=llm_instance,
+            toolsets=mcp_toolsets,
+        )
+        # --- END FIX ---
 
         app = wrap_agent_with_fasta2a(
             agent_instance=agent_instance,

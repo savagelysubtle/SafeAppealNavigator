@@ -1,4 +1,5 @@
 # src/savagelysubtle_airesearchagent/ag_ui_backend/state_manager.py
+import copy
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -41,7 +42,8 @@ class AGUIConversationState:
         )
 
     def update_state(self, new_state_snapshot: Dict[str, Any]):
-        self.current_state = new_state_snapshot
+        # Create a deep copy to avoid reference issues
+        self.current_state = copy.deepcopy(new_state_snapshot)
         logger.debug(f"Thread {self.thread_id}: State snapshot updated.")
 
     def patch_state(
@@ -51,7 +53,7 @@ class AGUIConversationState:
             self.current_state = jsonpatch.apply_patch(self.current_state, patch_ops)
             logger.debug(f"Thread {self.thread_id}: State patched successfully.")
             return True
-        except jsonpatch.JsonPatchException as e:
+        except (jsonpatch.JsonPatchException, Exception) as e:
             logger.error(f"Thread {self.thread_id}: Error applying state patch: {e}")
             return False
 
