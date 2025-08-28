@@ -36,6 +36,7 @@ dependencies = [
     "streamlit>=1.45.1",
     "pytest>=8.4.1",
     "pytest-asyncio>=1.0.0",
+    "chroma-mcp>=0.2.5",
 ]
 description = "Enhanced AI Research Assistant with advanced legal research capabilities, multi-LLM support, and intelligent document generation"
 license = { text = "Apache-2.0" }
@@ -64,6 +65,17 @@ version = "1.0.0"
 build-backend = "uv_build"
 requires      = [ "uv-build>=0.6.0,<0.7" ]
 
+[tool.pytest.ini_options]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--disable-warnings",
+]
+asyncio_mode = "auto"
+python_classes = [ "Test*" ]
+python_files = [ "test_*.py", "*_test.py" ]
+python_functions = [ "test_*" ]
+testpaths = [ "tests", "." ]
 
 [tool.ruff]
 exclude     = [ "**/node_modules", ".venv", "__pycache__" ]

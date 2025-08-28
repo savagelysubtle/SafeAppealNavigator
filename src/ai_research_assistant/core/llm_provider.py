@@ -58,7 +58,7 @@ def get_llm_model(
 
     if not model_name:
         # Define a default model if not provided
-        default_models = {"google": "gemini-1.5-pro"}
+        default_models = {"google": "gemini-2.5-flash-preview-05-20"}
         model_name = default_models.get(provider)
         if not model_name:
             raise ValueError(

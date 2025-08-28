@@ -6,7 +6,6 @@ from typing import Any, List, Optional
 
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServer
-from pydantic_ai.tools import Tool as PydanticAITool
 
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
@@ -55,45 +54,31 @@ class BasePydanticAgent:
             )
 
         # Initialize the underlying Agent with model and toolsets
-        self.pydantic_agent = Agent(
-            model=self.llm,
+        self.pydantic_agent = Agent(  # type: ignore
+            self.llm,
             system_prompt=(
                 self.config.pydantic_ai_instructions
                 or self.config.pydantic_ai_system_prompt
                 or ""
             ),
-            toolsets=self.toolsets,  # Pass toolsets directly to Agent
+            toolsets=self.toolsets
+            if self.toolsets
+            else [],  # Pass toolsets directly to Agent
         )
         logger.info(f"Agent '{self.agent_name}' initialized successfully.")
 
     async def initialize_mcp_tools(self):
-        """Asynchronously loads and assigns MCP tools."""
-        logger.debug(f"Initializing MCP tools for {self.agent_name}...")
-        mcp_tools = await self._get_mcp_tools()
-        self.pydantic_agent.tools.extend(mcp_tools)
-        logger.info(
-            f"Asynchronously loaded {len(mcp_tools)} MCP tools for {self.agent_name}."
+        """
+        MCP tools are already initialized when toolsets are passed to the Agent constructor.
+        This method is kept for compatibility but doesn't need to do anything.
+        """
+        logger.debug(
+            f"MCP tools already initialized for {self.agent_name} via toolsets parameter"
         )
-
-    async def _get_mcp_tools(self) -> List[PydanticAITool]:
-        """
-        Retrieves tools from all configured MCP servers (toolsets).
-        This method is now asynchronous.
-        """
-        all_tools: List[PydanticAITool] = []
-        if not self.toolsets:
-            return all_tools
-
-        for toolset in self.toolsets:
-            try:
-                # The `tools` property of MCPServer is an async generator
-                async for tool in toolset.tools:
-                    all_tools.append(tool)
-            except Exception as e:
-                logger.error(
-                    f"Failed to fetch tools from a toolset for agent {self.agent_name}: {e}"
-                )
-        return all_tools
+        if self.toolsets:
+            logger.info(
+                f"Agent {self.agent_name} has {len(self.toolsets)} MCP toolsets available."
+            )
 
     async def run_skill(self, prompt: str, **kwargs) -> Any:
         """A generic method to run the underlying PydanticAIAgent."""
@@ -102,3 +87,11 @@ class BasePydanticAgent:
         )
         result = await self.pydantic_agent.run(prompt, **kwargs)
         return result.output
+
+    def to_a2a(self, *args, **kwargs):
+        """
+        Convert this agent to A2A format by delegating to the underlying pydantic_agent.
+        This ensures that registered tools are properly available in the A2A interface.
+        """
+        logger.info(f"Converting {self.agent_name} to A2A format with registered tools")
+        return self.pydantic_agent.to_a2a(*args, **kwargs)

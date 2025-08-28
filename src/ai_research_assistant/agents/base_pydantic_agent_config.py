@@ -17,12 +17,13 @@ class BasePydanticAgentConfig(BaseModel):
     # The library expects the string format "google:<model_name>" for this provider.
     llm_provider: str = Field(
         default="google",
-        description="LLM provider key (e.g., 'openai', 'google', 'anthropic').",
+        description="LLM provider key (e.g., 'openai', 'google', 'anthropic', 'test').",
     )
 
-    # Use the stable and highly compatible gemini-1.5-flash model
+    # Use the latest Gemini 2.5 Flash model for better performance and quota handling
     llm_model_name: Optional[str] = Field(
-        default="gemini-1.5-flash", description="Specific model name for the provider."
+        default="gemini-2.5-flash-preview-05-20",
+        description="Specific model name for the provider.",
     )
     llm_temperature: float = Field(
         default=0.7, description="LLM temperature for generation."
