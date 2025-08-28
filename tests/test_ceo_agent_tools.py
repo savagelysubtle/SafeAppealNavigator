@@ -18,8 +18,13 @@ from ai_research_assistant.core.unified_llm_factory import get_llm_factory
 async def test_ceo_agent_tools():
     """Test the CEO agent with our new tool-based approach"""
 
-    # Set the Google API key
-    os.environ["GOOGLE_API_KEY"] = "YOUR_API_KEY_HERE"
+    # Check for Google API key in environment variables
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    if not api_key:
+        print("⚠️  Warning: GOOGLE_API_KEY not found in environment variables")
+        print("   Set it with: $env:GOOGLE_API_KEY='your-api-key-here' (PowerShell)")
+        print("   Skipping test that requires Google API...")
+        return
 
     print("🧪 Testing CEO Agent Tool Delegation...")
     print("=" * 50)
