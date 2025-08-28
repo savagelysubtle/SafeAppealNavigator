@@ -338,3 +338,4 @@ temp_*
 # Archive
 archive/
 mcpExample.json
+# Prevent test files with hardcoded secrets
