@@ -1,0 +1,3100 @@
+Directory structure:
+└── a2a_mcp/
+    ├── README.md
+    ├── pyproject.toml
+    ├── run.sh
+    ├── agent_cards/
+    │   ├── air_ticketing_agent.json
+    │   ├── car_rental_agent.json
+    │   ├── hotel_booking_agent.json
+    │   ├── orchestrator_agent.json
+    │   └── planner_agent.json
+    └── src/
+        └── a2a_mcp/
+            ├── __init__.py
+            ├── agents/
+            │   ├── __main__.py
+            │   ├── adk_travel_agent.py
+            │   ├── langgraph_planner_agent.py
+            │   └── orchestrator_agent.py
+            ├── common/
+            │   ├── agent_executor.py
+            │   ├── agent_runner.py
+            │   ├── base_agent.py
+            │   ├── prompts.py
+            │   ├── types.py
+            │   ├── utils.py
+            │   └── workflow.py
+            └── mcp/
+                ├── client.py
+                └── server.py
+
+================================================
+FILE: samples/python/agents/a2a_mcp/README.md
+================================================
+# A2A with MCP as Registry
+
+**Leveraging Model Context Protocol (MCP) as a standardized mechanism for discovering and retrieving Google A2A Agent Cards, enabling dynamic agent interaction using A2A.**
+
+## Table of Contents
+
+- [A2A with MCP as Registry](#a2a-with-mcp-as-registry)
+  - [Table of Contents](#table-of-contents)
+  - [Objective](#objective)
+  - [Background](#background)
+    - [A2A Protocol](#a2a-protocol)
+    - [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+  - [Core Proposal](#core-proposal)
+    - [Storing Agent Cards](#storing-agent-cards)
+    - [Discovering Agents via MCP](#discovering-agents-via-mcp)
+    - [Retrieving Agent Cards](#retrieving-agent-cards)
+    - [Finding an Agent for a Task](#finding-an-agent-for-a-task)
+    - [Initiating A2A Communication](#initiating-a2a-communication)
+  - [Use Case: Orchestrated Task Execution](#use-case-orchestrated-task-execution)
+    - [Core Concepts](#core-concepts)
+    - [Architectural Components](#architectural-components)
+  - [Example Flow: Travel Agent](#example-flow-travel-agent)
+  - [Steps to execute the example](#steps-to-execute-the-example)
+    - [File/Directory Descriptions](#filedirectory-descriptions)
+  - [Disclaimer](#disclaimer)
+
+## Objective
+
+To leverage Model Context Protocol (MCP) as a standardized mechanism for discovering and retrieving Google A2A Agent Cards. This enables dynamic agent interaction, particularly for planning and orchestration agents that utilize the A2A protocol.
+
+## Background
+
+### A2A Protocol
+
+The Agent-to-Agent (A2A) protocol standardizes runtime communication between agents. It defines:
+
+- **Agent Card:** A JSON schema describing an agent's identity, capabilities (actions/functions), and interaction endpoints.
+- **Message Formats & Interaction Flows:** Such as `ExecuteTask` for direct agent-to-agent interaction.
+
+### Model Context Protocol (MCP)
+
+MCP defines a standard way for applications (including AI models) to discover, access, and utilize contextual information, referred to as "tools", "resources", etc.
+
+## Core Proposal
+
+The central idea is to use an MCP server as a centralized, queryable repository for A2A Agent Cards.
+
+### Storing Agent Cards
+
+- Each A2A Agent Card (JSON) is stored (e.g., as a JSON file).
+- The MCP server exposes these Agent Cards as resources.
+- The underlying storage system could be a file system, database or even a vector store. This example uses agent cards stored in a file system, generates embeddings and uses them to find matches.
+
+### Discovering Agents via MCP
+
+- Clients query the MCP server's resource API (`list_resources`) to discover available agent cards.
+- Filtering can be applied using additional metadata (e.g., `streaming` support, tags like `currency conversion`), though not explicitly covered in this example.
+
+### Retrieving Agent Cards
+
+- The requesting agent uses resource URIs (obtained from discovery) to fetch the full JSON Agent Card(s) via the MCP server API.
+
+### Finding an Agent for a Task
+
+- Requesting agents can use tools exposed on the MCP server to find the most relevant agent for a specific query.
+
+### Initiating A2A Communication
+
+- Once Agent Card(s) are retrieved, the requesting agent uses them in an A2AClient.
+- Agents (like a Planning Agent) needing collaborators then use the standard A2A protocol to communicate directly with target agents.
+- MCP is not involved in this direct runtime interaction after discovery.
+
+## Use Case: Orchestrated Task Execution
+
+This system enables a workflow where specialized agents collaborate dynamically.
+
+### Core Concepts
+
+1. **Orchestration:** Planner and Executor agents manage the overall flow of a user query.
+2. **Specialization:** Task Agents are experts in specific types of tasks.
+3. **Dynamic Discovery:** The MCP Server allows for flexible addition, removal, or updates of Task Agents without modifying the Executor.
+4. **Standardized Communication:** The A2A protocol ensures reliable inter-agent communication.
+
+### Architectural Components
+
+1. **User Interface (UI) / Application Gateway:** Entry point for user queries.
+2. **Orchestrator Agent:**
+   - Receives a structured plan from the Planner Agent.
+   - Iterates through tasks.
+   - For each task:
+     - Queries the MCP Server for a suitable Task Agent based task (additionally capabilities).
+     - Connects and sends task details to the Task Agent via A2A.
+     - Receives results from the Task Agent via A2A.
+     - Manages task state and errors.
+   - Validates the results and potentially triggers replanning as needed.
+   - Synthesizes, summarizes, and formats results into a coherent user response.
+3. **Planner Agent:**
+   - Receives the raw user query.
+   - Decomposes the query into a structured plan of tasks (potentially a DAG), specifying required capabilities for each.
+4. **Model Context Protocol (MCP) Server:**
+   - Acts as a registry for Task Agents, hosting their Agent Cards.
+   - Provides an interface for the Executor Agent to query for agents.
+   - Provides an interface for the Executor Agent to query for tools.
+5. **Task Agents (Pool/Fleet):**
+   - Independent, specialized agents (e.g., Search Agent, Calculation Agent).
+   - Expose A2A-compatible endpoints.
+   - Execute tasks and return results to the Executor via A2A.
+6. **A2A Communication Layer:** The underlying protocol for inter-agent communication.
+
+```mermaid
+flowchart LR
+ subgraph s1["User Facing Layer"]
+        UI["User Interface / Gateway"]
+  end
+ subgraph s3["Agent / Tool Discovery"]
+        MCP["MCP Server (Agent / Tool Registry)"]
+  end
+ subgraph s4["Task Execution Layer"]
+        T1["Task Agent 1 (e.g., Air Tickets)"]
+        T2["Task Agent 2 (e.g., Hotel Reservation)"]
+        T3["Task Agent N (e.g., Car Rental Reservation)"]
+  end
+    UI --> E["Orchestrator Agent"]
+    E --> P["Planner Agent"] & MCP & A["Summary Agent"] & T1 & T2 & T3 & UI
+    T2 --> E & MCP
+    T3 --> E & MCP
+    T1 --> MCP
+     T1:::taskAgent
+     T1:::Sky
+     T2:::taskAgent
+     T2:::Sky
+     T3:::taskAgent
+     T3:::Sky
+    classDef taskAgent fill:#f9f,stroke:#333,stroke-width:2px
+    classDef a2aLink stroke-width:2px,stroke:#0077cc,stroke-dasharray: 5 5
+    classDef Sky stroke-width:1px, stroke-dasharray:none, stroke:#374D7C, fill:#E2EBFF, color:#374D7C
+```
+
+## Example Flow: Travel Agent
+
+1. User requests a trip plan.
+2. **Orchestrator Agent** receives the request.
+   1. Looks up the **Planner Agent**'s card via MCP and connects.
+   2. Invokes the Planner Agent to get a detailed plan.
+   3. For each step in the plan:
+      1. Invokes an MCP tool (e.g., `find_agent`) to fetch the Agent Card of the best Task Agent.
+      2. Invokes the selected Task Agent via A2A to execute the task:
+         - _Air Tickets:_ Task Agent will use a helper tool from the MCP server. The tool queries a SQLLite database to find the flights.
+         - _Hotels:_ Task Agent will use a helper tool from the MCP server.
+           The tool queries a SQLLite database to find the hotels.
+         - _Car Rental:_ Task Agent will use a helper tool from the MCP server.
+           The tool queries a SQLLite database to find the rental cars.
+      3. Stores the results in memory
+   4. Aggregates results and summarizes them for the client.
+   5. If the agent discovers budget mismatch or failures in booking, a re-planning task is kicked off.
+
+## Steps to execute the example
+
+This sample is built using 3 ADK agents to execute the tasks and a LangGraph agent that works as a planner.
+All the 3 ADK agents use the same python code but are instantiated with different agent cards.
+
+You can execute the following command to run all of the steps in one terminal:
+
+```sh
+bash samples/python/agents/a2a_mcp/run.sh
+```
+
+1. Start the MCP Server:
+
+   ```sh
+   cd samples/python/agents/a2a_mcp
+   uv venv # (if not already done)
+   source .venv/bin/activate
+   # Runs on port 10100 by default, change as needed by setting the --host and --port parameters.
+   uv run  --env-file .env a2a-mcp --run mcp-server --transport sse
+   ```
+
+2. Start the Orchestrator Agent:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv # (if not already done)
+   source .venv/bin/activate
+   # Note: Change the host and port as needed.
+   uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/orchestrator_agent.json --port 10101
+   ```
+
+3. Start the Planner Agent:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv # (if not already done)
+   source .venv/bin/activate
+   # Note: Change the host and port as needed.
+   uv run  --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/planner_agent.json --port 10102
+   ```
+
+4. Start the Airline Ticketing Agent:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv # (if not already done)
+   source .venv/bin/activate
+   # Note: Change the host and port as needed.
+   uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/air_ticketing_agent.json --port 10103
+   ```
+
+5. Start the Hotel Reservations Agent:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv # (if not already done)
+   source .venv/bin/activate
+   # Note: Change the host and port as needed.
+   uv run  --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/hotel_booking_agent.json --port 10104
+   ```
+
+6. Start the Car Rental Reservations Agent:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv  # (if not already done)
+   source .venv/bin/activate
+   # Note: Change the host and port as needed.
+   uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/car_rental_agent.json --port 10105
+   ```
+
+7. Start the cli:
+
+   In a new terminal window
+
+   ```bash
+   cd samples/python/agents/a2a_mcp
+   uv venv  # (if not already done)
+   source .venv/bin/activate
+
+   uv run --env-file .env src/a2a_mcp/mcp/client.py --resource "resource://agent_cards/list" --find_agent "I would like to plan a trip to France."
+   ```
+
+
+### File/Directory Descriptions
+
+- **`agent_cards/`**: This directory stores the JSON schemas for each A2A Agent Card. These cards define the identity, capabilities, and endpoints of the different agents in the system. The MCP server serves these cards.
+
+  - `*_agent.json`: Each JSON file represents a specific agent's card (e.g., `air_ticketing_agent.json` for the agent that handles flight bookings).
+
+- **`src/a2a_mcp/`**: The primary Python source code for this A2A with MCP sample.
+
+  - **`agents/`**: Contains the Python implementations of the different types of agents described in the design document.
+    - `__main__.py`: Main script to start up the agent services.
+    - `adk_travel_agent.py`: This is the core travel agent built using ADK, different agent cards are used to instantiate the agent.
+    - `langgraph_planner_agent.py`: The implementation of the "Planner Agent" using LangGraph, responsible for breaking down user requests into structured plans.
+    - `orchestrator_agent.py`: The implementation of the "Orchestrator Agent," which takes the plan from the Planner, discovers appropriate Task Agents via MCP, and invokes them using A2A.
+  - **`common/`**: Holds shared code used by multiple agents or parts of the system.
+    - `agent_executor.py`: An A2A module to manage the state, dependencies, and execution of tasks within the orchestration flow.
+    - `agent_runner.py`: A utility or framework component for running ADK agent instances, managing their lifecycle, and exposing their services.
+    - `base_agent.py`: An abstract base class or interface defining common methods and properties for all agents in this project.
+    - `prompts.py`: Contains predefined prompt templates used for interacting with Large Language Models (LLMs) within the agents (e.g., for planning or summarization).
+    - `types.py`: Defines custom Python data types, Pydantic models, or Enums used across the project (e.g., for representing tasks, agent card structures, or API requests/responses).
+    - `utils.py`: A collection of general-purpose utility functions.
+    - `workflow.py`: Workflow to manage the process flow.
+  - **`mcp/`**: Contains the implementation related to the Model Context Protocol.
+    - `client.py`: A helper MCP client library that used to query the MCP server for agent cards or tools. This is a test utility and not used by the agents.
+    - `server.py`: The implementation of the MCP server itself. This server hosts the agent cards as resources.
+
+- **`travel_agency.db`**: A light weight SQLLite DB that hosts the demo data.
+
+## Disclaimer
+Important: The sample code provided is for demonstration purposes and illustrates the mechanics of the Agent-to-Agent (A2A) protocol. When building production applications, it is critical to treat any agent operating outside of your direct control as a potentially untrusted entity.
+
+All data received from an external agent—including but not limited to its AgentCard, messages, artifacts, and task statuses—should be handled as untrusted input. For example, a malicious agent could provide an AgentCard containing crafted data in its fields (e.g., description, name, skills.description). If this data is used without sanitization to construct prompts for a Large Language Model (LLM), it could expose your application to prompt injection attacks.  Failure to properly validate and sanitize this data before use can introduce security vulnerabilities into your application.
+
+Developers are responsible for implementing appropriate security measures, such as input validation and secure handling of credentials to protect their systems and users.
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/pyproject.toml
+================================================
+[project]
+name = "a2a-mcp"
+version = "0.1.0"
+description = "A2A - MCP Sample"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "a2a-sdk[sql]>=0.3.0",
+    "click>=8.1.8",
+    "fastmcp>=1.0",
+    "google-adk>=1.0.0",
+    "google-cloud-aiplatform>=1.91.0",
+    "google-generativeai>=0.8.5",
+    "httpx>=0.28.1",
+    "langchain-google-genai>=2.0.10",
+    "langchain-mcp-adapters>=0.0.9",
+    "langgraph>=0.4.1",
+    "mcp[cli]>=1.5.0",
+    "nest-asyncio>=1.6.0",
+    "networkx>=3.4.2",
+    "numpy>=2.2.5",
+    "pandas>=2.2.3",
+    "pydantic>=2.11.4",
+    "litellm",
+]
+
+[project.scripts]
+a2a-mcp = "a2a_mcp:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/run.sh
+================================================
+#!/bin/bash
+
+# A script to automate the execution of the a2a_mcp example.
+# It starts all necessary servers and agents in the background,
+# runs the client, and then cleans up all background processes.
+
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
+# --- Configuration ---
+# The main working directory for the example
+WORK_DIR="samples/python/agents/a2a_mcp"
+# Directory to store log files for background processes
+LOG_DIR="logs"
+
+
+# --- Cleanup Function ---
+# This function is called automatically when the script exits (for any reason)
+# to ensure all background processes are terminated.
+cleanup() {
+    echo ""
+    echo "Shutting down background processes..."
+    # Check if the pids array is not empty
+    if [ ${#pids[@]} -ne 0 ]; then
+        # Kill all processes using their PIDs stored in the array.
+        # The 2>/dev/null suppresses "Terminated" messages or errors if a process is already gone.
+        kill "${pids[@]}" 2>/dev/null
+        wait "${pids[@]}" 2>/dev/null
+    fi
+    echo "Cleanup complete."
+}
+
+# Trap the EXIT signal to call the cleanup function. This ensures cleanup
+# runs whether the script finishes successfully, fails, or is interrupted.
+trap cleanup EXIT
+
+
+# --- Main Script Logic ---
+
+# Check if the working directory exists.
+if [ ! -d "$WORK_DIR" ]; then
+    echo "Error: Directory '$WORK_DIR' not found."
+    echo "Please run this script from the root of the repository."
+    exit 1
+fi
+
+# Navigate into the working directory.
+cd "$WORK_DIR"
+echo "Changed directory to $(pwd)"
+
+# Create a directory for log files if it doesn't exist.
+mkdir -p "$LOG_DIR"
+
+echo "Setting up Python virtual environment with 'uv'..."
+uv venv
+
+# Activate the virtual environment for the script and all its child processes.
+source .venv/bin/activate
+echo "Virtual environment activated."
+
+# Array to store Process IDs (PIDs) of background jobs.
+pids=()
+
+# --- Start Background Services ---
+echo ""
+echo "Starting servers and agents in the background..."
+
+# 1. Start MCP Server
+echo "-> Starting MCP Server (Port: 10100)... Log: $LOG_DIR/mcp_server.log"
+uv run --env-file .env a2a-mcp --run mcp-server --transport sse --port 10100 > "$LOG_DIR/mcp_server.log" 2>&1 &
+pids+=($!)
+
+# 2. Start Orchestrator Agent
+echo "-> Starting Orchestrator Agent (Port: 10101)... Log: $LOG_DIR/orchestrator_agent.log"
+uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/orchestrator_agent.json --port 10101 > "$LOG_DIR/orchestrator_agent.log" 2>&1 &
+pids+=($!)
+
+# 3. Start Planner Agent
+echo "-> Starting Planner Agent (Port: 10102)... Log: $LOG_DIR/planner_agent.log"
+uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/planner_agent.json --port 10102 > "$LOG_DIR/planner_agent.log" 2>&1 &
+pids+=($!)
+
+# 4. Start Airline Ticketing Agent
+echo "-> Starting Airline Agent (Port: 10103)... Log: $LOG_DIR/airline_agent.log"
+uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/air_ticketing_agent.json --port 10103 > "$LOG_DIR/airline_agent.log" 2>&1 &
+pids+=($!)
+
+# 5. Start Hotel Reservations Agent
+echo "-> Starting Hotel Agent (Port: 10104)... Log: $LOG_DIR/hotel_agent.log"
+uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/hotel_booking_agent.json --port 10104 > "$LOG_DIR/hotel_agent.log" 2>&1 &
+pids+=($!)
+
+# 6. Start Car Rental Reservations Agent
+echo "-> Starting Car Rental Agent (Port: 10105)... Log: $LOG_DIR/car_rental_agent.log"
+uv run --env-file .env src/a2a_mcp/agents/ --agent-card agent_cards/car_rental_agent.json --port 10105 > "$LOG_DIR/car_rental_agent.log" 2>&1 &
+pids+=($!)
+
+echo ""
+echo "All services are starting. Waiting 10 seconds for them to initialize..."
+sleep 10
+
+# --- Run the Foreground Client ---
+echo ""
+echo "---------------------------------------------------------"
+echo "Starting CLI Client..."
+echo "The script will exit after the client finishes."
+echo "---------------------------------------------------------"
+echo ""
+
+# 7. Start the CLI client in the foreground.
+# The script will pause here until this command completes.
+uv run --env-file .env src/a2a_mcp/mcp/client.py --resource "resource://agent_cards/list" --find_agent "I would like to plan a trip to France."
+
+echo ""
+echo "---------------------------------------------------------"
+echo "CLI client finished."
+echo "---------------------------------------------------------"
+
+# The 'trap' will now trigger the 'cleanup' function automatically upon exiting.
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/agent_cards/air_ticketing_agent.json
+================================================
+{
+    "name": "Air Ticketing Agent",
+    "description": "Helps book air tickets given a criteria",
+    "url": "http://localhost:10103/",
+    "version": "1.0.0",
+    "capabilities": {
+        "streaming": true,
+        "pushNotifications": true,
+        "stateTransitionHistory": false
+    },
+    "defaultInputModes": [
+        "text",
+        "text/plain"
+    ],
+    "defaultOutputModes": [
+        "text",
+        "text/plain"
+    ],
+    "skills": [
+        {
+            "id": "book_air_tickets",
+            "name": "Book Air Tickets",
+            "description": "Helps with booking air tickets given a criteria",
+            "tags": [
+                "Book air tickets"
+            ],
+            "examples": [
+                "Book return tickets from SFO to LHR, starting June 24 2025 and returning 30th June 2025"
+            ]
+        }
+    ]
+}
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/agent_cards/car_rental_agent.json
+================================================
+{
+    "name": "Car Rental Agent",
+    "description": "Helps book car rental",
+    "url": "http://localhost:10105/",
+    "version": "1.0.0",
+    "capabilities": {
+        "streaming": true,
+        "pushNotifications": true,
+        "stateTransitionHistory": false
+    },
+    "defaultInputModes": [
+        "text",
+        "text/plain"
+    ],
+    "defaultOutputModes": [
+        "text",
+        "text/plain"
+    ],
+    "skills": [
+        {
+            "id": "book_cars",
+            "name": "Book Car Rental",
+            "description": "Helps with booking car rental given a criteria",
+            "tags": [
+                "Book cars"
+            ],
+            "examples": [
+                "Book a rental car in London, starting on June 20, 2025, and ending on July 10, 2025"
+            ]
+        }
+    ]
+}
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/agent_cards/hotel_booking_agent.json
+================================================
+{
+    "name": "Hotel Booking Agent",
+    "description": "Helps book hotels given a criteria",
+    "url": "http://localhost:10104/",
+    "version": "1.0.0",
+    "capabilities": {
+        "streaming": true,
+        "pushNotifications": true,
+        "stateTransitionHistory": false
+    },
+    "defaultInputModes": [
+        "text",
+        "text/plain"
+    ],
+    "defaultOutputModes": [
+        "text",
+        "text/plain"
+    ],
+    "skills": [
+        {
+            "id": "book_accommodation",
+            "name": "Book Hotels",
+            "description": "Helps with booking hotels given a criteria",
+            "tags": [
+                "Book accommodation"
+            ],
+            "examples": [
+                "Book a hotel for 1 adult in Central London, starting June 24 2025 for 2 nights"
+            ]
+        }
+    ]
+}
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/agent_cards/orchestrator_agent.json
+================================================
+{
+    "name": "Orchestrator Agent",
+    "description": "Orchestrates the task generation and execution",
+    "url": "http://localhost:10101/",
+    "version": "1.0.0",
+    "capabilities": {
+        "streaming": true,
+        "pushNotifications": true,
+        "stateTransitionHistory": false
+    },
+    "defaultInputModes": [
+        "text",
+        "text/plain"
+    ],
+    "defaultOutputModes": [
+        "text",
+        "text/plain"
+    ],
+    "skills": [
+        {
+            "id": "executor",
+            "name": "Task Executor",
+            "description": "Orchestrates the task generation and execution, takes help from the planner to generate tasks",
+            "tags": [
+                "execute plan"
+            ],
+            "examples": [
+                "Plan my trip to London, submit an expense report"
+            ]
+        }
+    ]
+}
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/agent_cards/planner_agent.json
+================================================
+{
+    "name": "Langraph Planner Agent",
+    "description": "Helps breakdown a request in to actionable tasks",
+    "url": "http://localhost:10102/",
+    "version": "1.0.0",
+    "capabilities": {
+        "streaming": true,
+        "pushNotifications": true,
+        "stateTransitionHistory": false
+    },
+    "defaultInputModes": [
+        "text",
+        "text/plain"
+    ],
+    "defaultOutputModes": [
+        "text",
+        "text/plain"
+    ],
+    "skills": [
+        {
+            "id": "planner",
+            "name": "Task Planner",
+            "description": "Helps breakdown a request in to actionable tasks",
+            "tags": [
+                "planner"
+            ],
+            "examples": [
+                "Plan my business trip from San Francisco to London, submit an expense report"
+            ]
+        }
+    ]
+}
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/__init__.py
+================================================
+"""Convenience methods to start servers."""
+
+import click
+
+from a2a_mcp.mcp import server
+
+
+@click.command()
+@click.option('--run', 'command', default='mcp-server', help='Command to run')
+@click.option(
+    '--host',
+    'host',
+    default='localhost',
+    help='Host on which the server is started or the client connects to',
+)
+@click.option(
+    '--port',
+    'port',
+    default=10100,
+    help='Port on which the server is started or the client connects to',
+)
+@click.option(
+    '--transport',
+    'transport',
+    default='stdio',
+    help='MCP Transport',
+)
+def main(command, host, port, transport) -> None:
+    # TODO: Add other servers, perhaps dynamic port allocation
+    if command == 'mcp-server':
+        server.serve(host, port, transport)
+    else:
+        raise ValueError(f'Unknown run option: {command}')
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/agents/__main__.py
+================================================
+# type: ignore
+
+import json
+import logging
+import sys
+
+from pathlib import Path
+
+import click
+import httpx
+import uvicorn
+
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import (
+    BasePushNotificationSender,
+    InMemoryPushNotificationConfigStore,
+    InMemoryTaskStore,
+)
+from a2a.types import AgentCard
+from a2a_mcp.common import prompts
+from a2a_mcp.common.agent_executor import GenericAgentExecutor
+from adk_travel_agent import TravelAgent
+from langgraph_planner_agent import LangGraphPlannerAgent
+from orchestrator_agent import OrchestratorAgent
+
+
+logger = logging.getLogger(__name__)
+
+
+def get_agent(agent_card: AgentCard):
+    """Get the agent, given an agent card."""
+    try:
+        if agent_card.name == 'Orchestrator Agent':
+            return OrchestratorAgent()
+        if agent_card.name == 'Langraph Planner Agent':
+            return LangGraphPlannerAgent()
+        if agent_card.name == 'Air Ticketing Agent':
+            return TravelAgent(
+                agent_name='AirTicketingAgent',
+                description='Book air tickets given a criteria',
+                instructions=prompts.AIRFARE_COT_INSTRUCTIONS,
+            )
+        if agent_card.name == 'Hotel Booking Agent':
+            return TravelAgent(
+                agent_name='HotelBookingAgent',
+                description='Book hotels given a criteria',
+                instructions=prompts.HOTELS_COT_INSTRUCTIONS,
+            )
+        if agent_card.name == 'Car Rental Agent':
+            return TravelAgent(
+                agent_name='CarRentalBookingAgent',
+                description='Book rental cars given a criteria',
+                instructions=prompts.CARS_COT_INSTRUCTIONS,
+            )
+            # return LangraphCarRentalAgent()
+    except Exception as e:
+        raise e
+
+
+@click.command()
+@click.option('--host', 'host', default='localhost')
+@click.option('--port', 'port', default=10101)
+@click.option('--agent-card', 'agent_card')
+def main(host, port, agent_card):
+    """Starts an Agent server."""
+    try:
+        if not agent_card:
+            raise ValueError('Agent card is required')
+        with Path.open(agent_card) as file:
+            data = json.load(file)
+        agent_card = AgentCard(**data)
+
+        client = httpx.AsyncClient()
+        push_notification_config_store = InMemoryPushNotificationConfigStore()
+        push_notification_sender = BasePushNotificationSender(
+            client, config_store=push_notification_config_store
+        )
+
+        request_handler = DefaultRequestHandler(
+            agent_executor=GenericAgentExecutor(agent=get_agent(agent_card)),
+            task_store=InMemoryTaskStore(),
+            push_config_store=push_notification_config_store,
+            push_sender=push_notification_sender,
+        )
+
+        server = A2AStarletteApplication(
+            agent_card=agent_card, http_handler=request_handler
+        )
+
+        logger.info(f'Starting server on {host}:{port}')
+
+        uvicorn.run(server.build(), host=host, port=port)
+    except FileNotFoundError:
+        logger.error(f"Error: File '{agent_card}' not found.")
+        sys.exit(1)
+    except json.JSONDecodeError:
+        logger.error(f"Error: File '{agent_card}' contains invalid JSON.")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f'An error occurred during server startup: {e}')
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/agents/adk_travel_agent.py
+================================================
+# type: ignore
+
+import json
+import logging
+import re
+
+from collections.abc import AsyncIterable
+from typing import Any
+
+from a2a_mcp.common.agent_runner import AgentRunner
+from a2a_mcp.common.base_agent import BaseAgent
+from a2a_mcp.common.utils import get_mcp_server_config, init_api_key
+from google.adk.agents import Agent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+from google.adk.tools.mcp_tool.mcp_session_manager import SseServerParams
+from google.genai import types as genai_types
+
+
+logger = logging.getLogger(__name__)
+
+
+class TravelAgent(BaseAgent):
+    """Travel Agent backed by ADK."""
+
+    def __init__(self, agent_name: str, description: str, instructions: str):
+        init_api_key()
+
+        super().__init__(
+            agent_name=agent_name,
+            description=description,
+            content_types=['text', 'text/plain'],
+        )
+
+        logger.info(f'Init {self.agent_name}')
+
+        self.instructions = instructions
+        self.agent = None
+
+    async def init_agent(self):
+        logger.info(f'Initializing {self.agent_name} metadata')
+        config = get_mcp_server_config()
+        logger.info(f'MCP Server url={config.url}')
+        tools = await MCPToolset(
+            connection_params=SseServerParams(url=config.url)
+        ).get_tools()
+
+        for tool in tools:
+            logger.info(f'Loaded tools {tool.name}')
+        generate_content_config = genai_types.GenerateContentConfig(
+            temperature=0.0
+        )
+        LITELLM_MODEL = os.getenv('LITELLM_MODEL', 'gemini/gemini-2.0-flash')
+        self.agent = Agent(
+            name=self.agent_name,
+            instruction=self.instructions,
+            model=LiteLlm(model=LITELLM_MODEL),
+            disallow_transfer_to_parent=True,
+            disallow_transfer_to_peers=True,
+            generate_content_config=generate_content_config,
+            tools=tools,
+        )
+        self.runner = AgentRunner()
+
+    async def invoke(self, query, session_id) -> dict:
+        logger.info(f'Running {self.agent_name} for session {session_id}')
+
+        raise NotImplementedError('Please use the streraming function')
+
+    async def stream(
+        self, query, context_id, task_id
+    ) -> AsyncIterable[dict[str, Any]]:
+        logger.info(
+            f'Running {self.agent_name} stream for session {context_id} {task_id} - {query}'
+        )
+
+        if not query:
+            raise ValueError('Query cannot be empty')
+
+        if not self.agent:
+            await self.init_agent()
+        async for chunk in self.runner.run_stream(
+            self.agent, query, context_id
+        ):
+            logger.info(f'Received chunk {chunk}')
+            if isinstance(chunk, dict) and chunk.get('type') == 'final_result':
+                response = chunk['response']
+                yield self.get_agent_response(response)
+            else:
+                yield {
+                    'is_task_complete': False,
+                    'require_user_input': False,
+                    'content': f'{self.agent_name}: Processing Request...',
+                }
+
+    def format_response(self, chunk):
+        patterns = [
+            r'```\n(.*?)\n```',
+            r'```json\s*(.*?)\s*```',
+            r'```tool_outputs\s*(.*?)\s*```',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, chunk, re.DOTALL)
+            if match:
+                content = match.group(1)
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    return content
+        return chunk
+
+    def get_agent_response(self, chunk):
+        logger.info(f'Response Type {type(chunk)}')
+        data = self.format_response(chunk)
+        logger.info(f'Formatted Response {data}')
+        try:
+            if isinstance(data, dict):
+                if 'status' in data and data['status'] == 'input_required':
+                    return {
+                        'response_type': 'text',
+                        'is_task_complete': False,
+                        'require_user_input': True,
+                        'content': data['question'],
+                    }
+                return {
+                    'response_type': 'data',
+                    'is_task_complete': True,
+                    'require_user_input': False,
+                    'content': data,
+                }
+            return_type = 'data'
+            try:
+                data = json.loads(data)
+                return_type = 'data'
+            except Exception as json_e:
+                logger.error(f'Json conversion error {json_e}')
+                return_type = 'text'
+            return {
+                'response_type': return_type,
+                'is_task_complete': True,
+                'require_user_input': False,
+                'content': data,
+            }
+        except Exception as e:
+            logger.error(f'Error in get_agent_response: {e}')
+            return {
+                'response_type': 'text',
+                'is_task_complete': True,
+                'require_user_input': False,
+                'content': 'Could not complete booking / task. Please try again.',
+            }
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/agents/langgraph_planner_agent.py
+================================================
+# type: ignore
+
+import logging
+
+from collections.abc import AsyncIterable
+from typing import Any, Literal
+
+from a2a_mcp.common import prompts
+from a2a_mcp.common.base_agent import BaseAgent
+from a2a_mcp.common.types import TaskList
+from a2a_mcp.common.utils import init_api_key
+from langchain_core.messages import AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import create_react_agent
+from pydantic import BaseModel, Field
+
+
+memory = MemorySaver()
+logger = logging.getLogger(__name__)
+
+
+class ResponseFormat(BaseModel):
+    """Respond to the user in this format."""
+
+    status: Literal['input_required', 'completed', 'error'] = 'input_required'
+    question: str = Field(
+        description='Input needed from the user to generate the plan'
+    )
+    content: TaskList = Field(
+        description='List of tasks when the plan is generated'
+    )
+
+
+class LangGraphPlannerAgent(BaseAgent):
+    """Planner Agent backed by LangGraph."""
+
+    def __init__(self):
+        init_api_key()
+
+        logger.info('Initializing LanggraphPlannerAgent')
+
+        super().__init__(
+            agent_name='PlannerAgent',
+            description='Breakdown the user request into executable tasks',
+            content_types=['text', 'text/plain'],
+        )
+
+        self.model = ChatGoogleGenerativeAI(
+            model='gemini-2.0-flash', temperature=0.0
+        )
+
+        self.graph = create_react_agent(
+            self.model,
+            checkpointer=memory,
+            prompt=prompts.PLANNER_COT_INSTRUCTIONS,
+            # prompt=prompts.TRIP_PLANNER_INSTRUCTIONS_1,
+            response_format=ResponseFormat,
+            tools=[],
+        )
+
+    def invoke(self, query, sessionId) -> str:
+        config = {'configurable': {'thread_id': sessionId}}
+        self.graph.invoke({'messages': [('user', query)]}, config)
+        return self.get_agent_response(config)
+
+    async def stream(
+        self, query, sessionId, task_id
+    ) -> AsyncIterable[dict[str, Any]]:
+        inputs = {'messages': [('user', query)]}
+        config = {'configurable': {'thread_id': sessionId}}
+
+        logger.info(
+            f'Running LanggraphPlannerAgent stream for session {sessionId} {task_id} with input {query}'
+        )
+
+        for item in self.graph.stream(inputs, config, stream_mode='values'):
+            message = item['messages'][-1]
+            if isinstance(message, AIMessage):
+                yield {
+                    'response_type': 'text',
+                    'is_task_complete': False,
+                    'require_user_input': False,
+                    'content': message.content,
+                }
+        yield self.get_agent_response(config)
+
+    def get_agent_response(self, config):
+        current_state = self.graph.get_state(config)
+        structured_response = current_state.values.get('structured_response')
+        if structured_response and isinstance(
+            structured_response, ResponseFormat
+        ):
+            if (
+                structured_response.status == 'input_required'
+                # and structured_response.content.tasks
+            ):
+                return {
+                    'response_type': 'text',
+                    'is_task_complete': False,
+                    'require_user_input': True,
+                    'content': structured_response.question,
+                }
+            if structured_response.status == 'error':
+                return {
+                    'response_type': 'text',
+                    'is_task_complete': False,
+                    'require_user_input': True,
+                    'content': structured_response.question,
+                }
+            if structured_response.status == 'completed':
+                return {
+                    'response_type': 'data',
+                    'is_task_complete': True,
+                    'require_user_input': False,
+                    'content': structured_response.content.model_dump(),
+                }
+        return {
+            'is_task_complete': False,
+            'require_user_input': True,
+            'content': 'We are unable to process your request at the moment. Please try again.',
+        }
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/agents/orchestrator_agent.py
+================================================
+import json
+import logging
+
+from collections.abc import AsyncIterable
+
+from a2a.types import (
+    SendStreamingMessageSuccessResponse,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatusUpdateEvent,
+)
+from a2a_mcp.common import prompts
+from a2a_mcp.common.base_agent import BaseAgent
+from a2a_mcp.common.utils import init_api_key
+from a2a_mcp.common.workflow import Status, WorkflowGraph, WorkflowNode
+from google import genai
+
+
+logger = logging.getLogger(__name__)
+
+
+class OrchestratorAgent(BaseAgent):
+    """Orchestrator Agent."""
+
+    def __init__(self):
+        init_api_key()
+        super().__init__(
+            agent_name='Orchestrator Agent',
+            description='Facilitate inter agent communication',
+            content_types=['text', 'text/plain'],
+        )
+        self.graph = None
+        self.results = []
+        self.travel_context = {}
+        self.query_history = []
+        self.context_id = None
+
+    async def generate_summary(self) -> str:
+        client = genai.Client()
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompts.SUMMARY_COT_INSTRUCTIONS.replace(
+                '{travel_data}', str(self.results)
+            ),
+            config={'temperature': 0.0},
+        )
+        return response.text
+
+    def answer_user_question(self, question) -> str:
+        try:
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=prompts.QA_COT_PROMPT.replace(
+                    '{TRIP_CONTEXT}', str(self.travel_context)
+                )
+                .replace('{CONVERSATION_HISTORY}', str(self.query_history))
+                .replace('{TRIP_QUESTION}', question),
+                config={
+                    'temperature': 0.0,
+                    'response_mime_type': 'application/json',
+                },
+            )
+            return response.text
+        except Exception as e:
+            logger.info(f'Error answering user question: {e}')
+        return '{"can_answer": "no", "answer": "Cannot answer based on provided context"}'
+
+    def set_node_attributes(
+        self, node_id, task_id=None, context_id=None, query=None
+    ):
+        attr_val = {}
+        if task_id:
+            attr_val['task_id'] = task_id
+        if context_id:
+            attr_val['context_id'] = context_id
+        if query:
+            attr_val['query'] = query
+
+        self.graph.set_node_attributes(node_id, attr_val)
+
+    def add_graph_node(
+        self,
+        task_id,
+        context_id,
+        query: str,
+        node_id: str = None,
+        node_key: str = None,
+        node_label: str = None,
+    ) -> WorkflowNode:
+        """Add a node to the graph."""
+        node = WorkflowNode(
+            task=query, node_key=node_key, node_label=node_label
+        )
+        self.graph.add_node(node)
+        if node_id:
+            self.graph.add_edge(node_id, node.id)
+        self.set_node_attributes(node.id, task_id, context_id, query)
+        return node
+
+    def clear_state(self):
+        self.graph = None
+        self.results.clear()
+        self.travel_context.clear()
+        self.query_history.clear()
+
+    async def stream(
+        self, query, context_id, task_id
+    ) -> AsyncIterable[dict[str, any]]:
+        """Execute and stream response."""
+        logger.info(
+            f'Running {self.agent_name} stream for session {context_id}, task {task_id} - {query}'
+        )
+        if not query:
+            raise ValueError('Query cannot be empty')
+        if self.context_id != context_id:
+            # Clear state when the context changes
+            self.clear_state()
+            self.context_id = context_id
+
+        self.query_history.append(query)
+        start_node_id = None
+        # Graph does not exist, start a new graph with planner node.
+        if not self.graph:
+            self.graph = WorkflowGraph()
+            planner_node = self.add_graph_node(
+                task_id=task_id,
+                context_id=context_id,
+                query=query,
+                node_key='planner',
+                node_label='Planner',
+            )
+            start_node_id = planner_node.id
+        # Paused state is when the agent might need more information.
+        elif self.graph.state == Status.PAUSED:
+            start_node_id = self.graph.paused_node_id
+            self.set_node_attributes(node_id=start_node_id, query=query)
+
+        # This loop can be avoided if the workflow graph is dynamic or
+        # is built from the results of the planner when the planner
+        # iself is not a part of the graph.
+        # TODO: Make the graph dynamically iterable over edges
+        while True:
+            # Set attributes on the node so we propagate task and context
+            self.set_node_attributes(
+                node_id=start_node_id,
+                task_id=task_id,
+                context_id=context_id,
+            )
+            # Resume workflow, used when the workflow nodes are updated.
+            should_resume_workflow = False
+            async for chunk in self.graph.run_workflow(
+                start_node_id=start_node_id
+            ):
+                if isinstance(chunk.root, SendStreamingMessageSuccessResponse):
+                    # The graph node retured TaskStatusUpdateEvent
+                    # Check if the node is complete and continue to the next node
+                    if isinstance(chunk.root.result, TaskStatusUpdateEvent):
+                        task_status_event = chunk.root.result
+                        context_id = task_status_event.context_id
+                        if (
+                            task_status_event.status.state
+                            == TaskState.completed
+                            and context_id
+                        ):
+                            ## yeild??
+                            continue
+                        if (
+                            task_status_event.status.state
+                            == TaskState.input_required
+                        ):
+                            question = task_status_event.status.message.parts[
+                                0
+                            ].root.text
+
+                            try:
+                                answer = json.loads(
+                                    self.answer_user_question(question)
+                                )
+                                logger.info(f'Agent Answer {answer}')
+                                if answer['can_answer'] == 'yes':
+                                    # Orchestrator can answer on behalf of the user set the query
+                                    # Resume workflow from paused state.
+                                    query = answer['answer']
+                                    start_node_id = self.graph.paused_node_id
+                                    self.set_node_attributes(
+                                        node_id=start_node_id, query=query
+                                    )
+                                    should_resume_workflow = True
+                            except Exception:
+                                logger.info('Cannot convert answer data')
+
+                    # The graph node retured TaskArtifactUpdateEvent
+                    # Store the node and continue.
+                    if isinstance(chunk.root.result, TaskArtifactUpdateEvent):
+                        artifact = chunk.root.result.artifact
+                        self.results.append(artifact)
+                        if artifact.name == 'PlannerAgent-result':
+                            # Planning agent returned data, update graph.
+                            artifact_data = artifact.parts[0].root.data
+                            if 'trip_info' in artifact_data:
+                                self.travel_context = artifact_data['trip_info']
+                            logger.info(
+                                f'Updating workflow with {len(artifact_data["tasks"])} task nodes'
+                            )
+                            # Define the edges
+                            current_node_id = start_node_id
+                            for idx, task_data in enumerate(
+                                artifact_data['tasks']
+                            ):
+                                node = self.add_graph_node(
+                                    task_id=task_id,
+                                    context_id=context_id,
+                                    query=task_data['description'],
+                                    node_id=current_node_id,
+                                )
+                                current_node_id = node.id
+                                # Restart graph from the newly inserted subgraph state
+                                # Start from the new node just created.
+                                if idx == 0:
+                                    should_resume_workflow = True
+                                    start_node_id = node.id
+                        else:
+                            # Not planner but artifacts from other tasks,
+                            # continue to the next node in the workflow.
+                            # client does not get the artifact,
+                            # a summary is shown at the end of the workflow.
+                            continue
+                # When the workflow needs to be resumed, do not yield partial.
+                if not should_resume_workflow:
+                    logger.info('No workflow resume detected, yielding chunk')
+                    # Yield partial execution
+                    yield chunk
+            # The graph is complete and no updates, so okay to break from the loop.
+            if not should_resume_workflow:
+                logger.info(
+                    'Workflow iteration complete and no restart requested. Exiting main loop.'
+                )
+                break
+            else:
+                # Readable logs
+                logger.info('Restarting workflow loop.')
+        if self.graph.state == Status.COMPLETED:
+            # All individual actions complete, now generate the summary
+            logger.info(f'Generating summary for {len(self.results)} results')
+            summary = await self.generate_summary()
+            self.clear_state()
+            logger.info(f'Summary: {summary}')
+            yield {
+                'response_type': 'text',
+                'is_task_complete': True,
+                'require_user_input': False,
+                'content': summary,
+            }
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/agent_executor.py
+================================================
+import logging
+
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.events import EventQueue
+from a2a.server.tasks import TaskUpdater
+from a2a.types import (
+    DataPart,
+    InvalidParamsError,
+    SendStreamingMessageSuccessResponse,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatusUpdateEvent,
+    TextPart,
+    UnsupportedOperationError,
+)
+from a2a.utils import new_agent_text_message, new_task
+from a2a.utils.errors import ServerError
+from a2a_mcp.common.base_agent import BaseAgent
+
+
+logger = logging.getLogger(__name__)
+
+
+class GenericAgentExecutor(AgentExecutor):
+    """AgentExecutor used by the tragel agents."""
+
+    def __init__(self, agent: BaseAgent):
+        self.agent = agent
+
+    async def execute(
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+    ) -> None:
+        logger.info(f'Executing agent {self.agent.agent_name}')
+        error = self._validate_request(context)
+        if error:
+            raise ServerError(error=InvalidParamsError())
+
+        query = context.get_user_input()
+
+        task = context.current_task
+
+        if not task:
+            task = new_task(context.message)
+            await event_queue.enqueue_event(task)
+
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+
+        async for item in self.agent.stream(query, task.context_id, task.id):
+            # Agent to Agent call will return events,
+            # Update the relevant ids to proxy back.
+            if hasattr(item, 'root') and isinstance(
+                item.root, SendStreamingMessageSuccessResponse
+            ):
+                event = item.root.result
+                if isinstance(
+                    event,
+                    (TaskStatusUpdateEvent | TaskArtifactUpdateEvent),
+                ):
+                    await event_queue.enqueue_event(event)
+                continue
+
+            is_task_complete = item['is_task_complete']
+            require_user_input = item['require_user_input']
+
+            if is_task_complete:
+                if item['response_type'] == 'data':
+                    part = DataPart(data=item['content'])
+                else:
+                    part = TextPart(text=item['content'])
+
+                await updater.add_artifact(
+                    [part],
+                    name=f'{self.agent.agent_name}-result',
+                )
+                await updater.complete()
+                break
+            if require_user_input:
+                await updater.update_status(
+                    TaskState.input_required,
+                    new_agent_text_message(
+                        item['content'],
+                        task.context_id,
+                        task.id,
+                    ),
+                    final=True,
+                )
+                break
+            await updater.update_status(
+                TaskState.working,
+                new_agent_text_message(
+                    item['content'],
+                    task.context_id,
+                    task.id,
+                ),
+            )
+
+    def _validate_request(self, context: RequestContext) -> bool:
+        return False
+
+    async def cancel(
+        self, request: RequestContext, event_queue: EventQueue
+    ) -> Task | None:
+        raise ServerError(error=UnsupportedOperationError())
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/agent_runner.py
+================================================
+# type: ignore
+
+import uuid
+
+from collections.abc import AsyncGenerator
+
+from google.adk.agents import Agent
+from google.adk.events import Event
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+
+
+class AgentRunner:
+    """Manages the execution of an ADK (Agent Development Kit) Agent.
+
+    This class encapsulates the logic for running an agent, handling session
+    management (creation and retrieval), and streaming responses back to the
+    caller. It uses an in-memory session service.
+    """
+
+    def __init__(
+        self,
+        user_id: str = 'user_1',
+        app_name: str = 'A2A-MCP',
+    ):
+        self.session_service = InMemorySessionService()
+        self.session = None
+        self.app_name = app_name
+        self.user_id = user_id
+
+    async def run_stream(
+        self, agent: Agent, query: str, session_id: str
+    ) -> AsyncGenerator[Event, None]:
+        runner = Runner(
+            agent=agent,
+            app_name=self.app_name,
+            session_service=self.session_service,
+        )
+        if not session_id:
+            session_id = uuid.uuid4().hex
+        else:
+            self.session = await self.session_service.get_session(
+                app_name=self.app_name,
+                user_id=self.user_id,
+                session_id=session_id,
+            )
+        if not self.session:
+            self.session = await self.session_service.create_session(
+                app_name=self.app_name,
+                user_id=self.user_id,
+                session_id=session_id,
+            )
+        content = types.Content(role='user', parts=[types.Part(text=query)])
+
+        async for event in runner.run_async(
+            user_id=self.user_id,
+            session_id=self.session.id,
+            new_message=content,
+        ):
+            if event.is_final_response():
+                response = ''
+                if (
+                    event.content
+                    and event.content.parts
+                    and event.content.parts[0].text
+                ):
+                    response = '\n'.join(
+                        [p.text for p in event.content.parts if p.text]
+                    )
+                elif (
+                    event.content
+                    and event.content.parts
+                    and any(
+                        True for p in event.content.parts if p.function_response
+                    )
+                ):
+                    response = next(
+                        p.function_response.model_dump()
+                        for p in event.content.parts
+                    )
+                else:
+                    response = f'Error in running agent: {agent.name}'
+                yield {
+                    'type': 'final_result',
+                    'response': response,
+                }
+            else:
+                yield {
+                    'is_task_complete': False,
+                    'require_user_input': False,
+                    'content': f'{agent.name}: Processing request...',
+                }
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/base_agent.py
+================================================
+# type: ignore
+from abc import ABC
+
+from pydantic import BaseModel, Field
+
+
+class BaseAgent(BaseModel, ABC):
+    """Base class for agents."""
+
+    model_config = {
+        'arbitrary_types_allowed': True,
+        'extra': 'allow',
+    }
+
+    agent_name: str = Field(
+        description='The name of the agent.',
+    )
+
+    description: str = Field(
+        description="A brief description of the agent's purpose.",
+    )
+
+    content_types: list[str] = Field(description='Supported content types.')
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/prompts.py
+================================================
+# System Instructions to the Airfare Agent
+AIRFARE_COT_INSTRUCTIONS = """
+You are an Airline ticket booking / reservation assistant.
+Your task is to help the users with flight bookings.
+
+Always use chain-of-thought reasoning before responding to track where you are 
+in the decision tree and determine the next appropriate question.
+
+Your question should follow the example format below
+{
+    "status": "input_required",
+    "question": "What cabin class do you wish to fly?"
+}
+
+DECISION TREE:
+1. Origin
+    - If unknown, ask for origin.
+    - If known, proceed to step 2.
+2. Destination
+    - If unknown, ask for destination.
+    - If known, proceed to step 3.
+3. Dates
+    - If unknown, ask for start and return dates.
+    - If known, proceed to step 4.
+4. Class
+    - If unknown, ask for cabin class.
+    - If known, proceed to step 5.
+
+CHAIN-OF-THOUGHT PROCESS:
+Before each response, reason through:
+1. What information do I already have? [List all known information]
+2. What is the next unknown information in the decision tree? [Identify gap]
+3. How should I naturally ask for this information? [Formulate question]
+4. What context from previous information should I include? [Add context]
+5. If I have all the information I need, I should now proceed to search
+
+You will use the tools provided to you to search for the ariline tickets, after you have all the information.
+For return bookings, you will use the tools again.
+
+
+If the search does not return any results for the user criteria.
+    - Search again for a different ticket class.
+    - Respond to the user in the following format.
+    {
+        "status": "input_required",
+        "question": "I could not find any flights that match your criteria, but I found tickets in First Class, would you like to book that instead?"
+    }
+
+Schema for the datamodel is in the DATAMODEL section.
+Respond in the format shown in the RESPONSE section.
+
+
+DATAMODEL:
+CREATE TABLE flights (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        carrier TEXT NOT NULL,
+        flight_number INTEGER NOT NULL,
+        from_airport TEXT NOT NULL,
+        to_airport TEXT NOT NULL,
+        ticket_class TEXT NOT NULL,
+        price REAL NOT NULL
+    )
+
+    ticket_class is an enum with values 'ECONOMY', 'BUSINESS' and 'FIRST'
+
+    Example:
+
+    Onward Journey:
+
+    SELECT carrier, flight_number, from_airport, to_airport, ticket_class, price FROM flights
+    WHERE from_airport = 'SFO' AND to_airport = 'LHR' AND ticket_class = 'BUSINESS'
+
+    Return Journey:
+    SELECT carrier, flight_number, from_airport, to_airport, ticket_class, price FROM flights
+    WHERE from_airport = 'LHR' AND to_airport = 'SFO' AND ticket_class = 'BUSINESS'
+
+RESPONSE:
+    {
+        "onward": {
+            "airport" : "[DEPARTURE_LOCATION (AIRPORT_CODE)]",
+            "date" : "[DEPARTURE_DATE]",
+            "airline" : "[AIRLINE]",
+            "flight_number" : "[FLIGHT_NUMBER]",
+            "travel_class" : "[TRAVEL_CLASS]",
+            "cost" : "[PRICE]"
+        },
+        "return": {
+            "airport" : "[DESTINATION_LOCATION (AIRPORT_CODE)]",
+            "date" : "[RETURN_DATE]",
+            "airline" : "[AIRLINE]",
+            "flight_number" : "[FLIGHT_NUMBER]",
+            "travel_class" : "[TRAVEL_CLASS]",
+            "cost" : "[PRICE]"
+        },
+        "total_price": "[TOTAL_PRICE]",
+        "status": "completed",
+        "description": "Booking Complete"
+    }
+"""
+
+# System Instructions to the Hotels Agent
+HOTELS_COT_INSTRUCTIONS = """
+You are an Hotel reservation assistant.
+Your task is to help the users with hotel bookings.
+
+Always use chain-of-thought reasoning before responding to track where you are 
+in the decision tree and determine the next appropriate question.
+
+If you have a question, you should should strictly follow the example format below
+{
+    "status": "input_required",
+    "question": "What is your checkout date?"
+}
+
+
+DECISION TREE:
+1. City
+    - If unknown, ask for the city.
+    - If known, proceed to step 2.
+2. Dates
+    - If unknown, ask for checkin and checkout dates.
+    - If known, proceed to step 3.
+3. Property Type
+    - If unknown, ask for the type of property. Hotel, AirBnB or a private property.
+    - If known, proceed to step 4.
+4. Room Type
+    - If unknown, ask for the room type. Suite, Standard, Single, Double.
+    - If known, proceed to step 5.
+
+CHAIN-OF-THOUGHT PROCESS:
+Before each response, reason through:
+1. What information do I already have? [List all known information]
+2. What is the next unknown information in the decision tree? [Identify gap]
+3. How should I naturally ask for this information? [Formulate question]
+4. What context from previous information should I include? [Add context]
+5. If I have all the information I need, I should now proceed to search.
+
+
+You will use the tools provided to you to search for the hotels, after you have all the information.
+
+If the search does not return any results for the user criteria.
+    - Search again for a different hotel or property type.
+    - Respond to the user in the following format.
+    {
+        "status": "input_required",
+        "question": "I could not find any properties that match your criteria, however, I was able to find an AirBnB, would you like to book that instead?"
+    }
+
+Schema for the datamodel is in the DATAMODEL section.
+Respond in the format shown in the RESPONSE section.
+
+DATAMODEL:
+CREATE TABLE hotels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        city TEXT NOT NULL,
+        hotel_type TEXT NOT NULL,
+        room_type TEXT NOT NULL, 
+        price_per_night REAL NOT NULL
+    )
+    hotel_type is an enum with values 'HOTEL', 'AIRBNB' and 'PRIVATE_PROPERTY'
+    room_type is an enum with values 'STANDARD', 'SINGLE', 'DOUBLE', 'SUITE'
+
+    Example:
+    SELECT name, city, hotel_type, room_type, price_per_night FROM hotels WHERE city ='London' AND hotel_type = 'HOTEL' AND room_type = 'SUITE'
+
+RESPONSE:
+    {
+        "name": "[HOTEL_NAME]",
+        "city": "[CITY]",
+        "hotel_type": "[ACCOMMODATION_TYPE]",
+        "room_type": "[ROOM_TYPE]",
+        "price_per_night": "[PRICE_PER_NIGHT]",
+        "check_in_time": "3:00 pm",
+        "check_out_time": "11:00 am",
+        "total_rate_usd": "[TOTAL_RATE], --Number of nights * price_per_night"
+        "status": "[BOOKING_STATUS]",
+        "description": "Booking Complete"
+    }
+"""
+
+# System Instructions to the Car Rental Agent
+CARS_COT_INSTRUCTIONS = """
+You are an car rental reservation assistant.
+Your task is to help the users with car rental reservations.
+
+Always use chain-of-thought reasoning before responding to track where you are 
+in the decision tree and determine the next appropriate question.
+
+Your question should follow the example format below
+{
+    "status": "input_required",
+    "question": "What class of car do you prefer, Sedan, SUV or a Truck?"
+}
+
+
+DECISION TREE:
+1. City
+    - If unknown, ask for the city.
+    - If known, proceed to step 2.
+2. Dates
+    - If unknown, ask for pickup and return dates.
+    - If known, proceed to step 3.
+3. Class of car
+    - If unknown, ask for the class of car. Sedan, SUV or a Truck.
+    - If known, proceed to step 4.
+
+CHAIN-OF-THOUGHT PROCESS:
+Before each response, reason through:
+1. What information do I already have? [List all known information]
+2. What is the next unknown information in the decision tree? [Identify gap]
+3. How should I naturally ask for this information? [Formulate question]
+4. What context from previous information should I include? [Add context]
+5. If I have all the information I need, I should now proceed to search
+
+You will use the tools provided to you to search for the hotels, after you have all the information.
+
+If the search does not return any results for the user criteria.
+    - Search again for a different type of car.
+    - Respond to the user in the following format.
+    {
+        "status": "input_required",
+        "question": "I could not find any cars that match your criteria, however, I was able to find an SUV, would you like to book that instead?"
+    }
+
+Schema for the datamodel is in the DATAMODEL section.
+Respond in the format shown in the RESPONSE section.
+
+DATAMODEL:
+    CREATE TABLE rental_cars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider TEXT NOT NULL,
+        city TEXT NOT NULL,
+        type_of_car TEXT NOT NULL,
+        daily_rate REAL NOT NULL
+    )
+
+    type_of_car is an enum with values 'SEDAN', 'SUV' and 'TRUCK'
+
+    Example:
+    SELECT provider, city, type_of_car, daily_rate FROM rental_cars WHERE city = 'London' AND type_of_car = 'SEDAN'
+
+RESPONSE:
+    {
+        "pickup_date": "[PICKUP_DATE]",
+        "return_date": "[RETURN_DATE]",
+        "provider": "[PROVIDER]",
+        "city": "[CITY]",
+        "car_type": "[CAR_TYPE]",
+        "status": "booking_complete",
+        "price": "[TOTAL_PRICE]",
+        "description": "Booking Complete"
+    }
+"""
+
+# System Instructions to the Planner Agent
+PLANNER_COT_INSTRUCTIONS = """
+You are an ace trip planner.
+You take the user input and create a trip plan, break the trip in to actionable task.
+You will include 3 tasks in your plan, based on the user request.
+1. Airfare Booking.
+2. Hotel Booking.
+3. Car Rental Booking.
+
+Always use chain-of-thought reasoning before responding to track where you are 
+in the decision tree and determine the next appropriate question.
+
+Your question should follow the example format below
+{
+    "status": "input_required",
+    "question": "What class of car do you prefer, Sedan, SUV or a Truck?"
+}
+
+
+DECISION TREE:
+1. Origin
+    - If unknown, ask for origin.
+    - If there are multiple airports at origin, ask for preferred airport.
+    - If known, proceed to step 2.
+2. Destination
+    - If unknown, ask for destination.
+    - If there are multiple airports at origin, ask for preferred airport.
+    - If known, proceed to step 3.
+3. Dates
+    - If unknown, ask for start and return dates.
+    - If known, proceed to step 4.
+4. Budget
+    - If unknown, ask for budget.
+    - If known, proceed to step 5.
+5. Type of travel
+    - If unknown, ask for type of travel. Business or Leisure.
+    - If known, proceed to step 6.
+6. No of travelers
+    - If unknown, ask for the number of travelers.
+    - If known, proceed to step 7.
+7. Class
+    - If unknown, ask for cabin class.
+    - If known, proceed to step 8.
+8. Checkin and Checkout dates
+    - Use start and return dates for checkin and checkout dates.
+    - Confirm with the user if they wish a different checkin and checkout dates.
+    - Validate if the checkin and checkout dates are within the start and return dates.
+    - If known and data is valid, proceed to step 9.
+9. Property Type
+    - If unknown, ask for the type of property. Hotel, AirBnB or a private property.
+    - If known, proceed to step 10.
+10. Room Type
+    - If unknown, ask for the room type. Suite, Standard, Single, Double.
+    - If known, proceed to step 11.
+11. Car Rental Requirement
+    - If unknown, ask if the user needs a rental car.
+    - If known, proceed to step 12.
+12. Type of car
+    - If unknown, ask for the type of car. Sedan, SUV or a Truck.
+    - If known, proceed to step 13.
+13. Car Rental Pickup and return dates
+    - Use start and return dates for pickup and return dates.
+    - Confirm with the user if they wish a different pickup and return dates.
+    - Validate if the pickup and return dates are within the start and return dates.
+    - If known and data is valid, proceed to step 14.
+
+
+
+CHAIN-OF-THOUGHT PROCESS:
+Before each response, reason through:
+1. What information do I already have? [List all known information]
+2. What is the next unknown information in the decision tree? [Identify gap]
+3. How should I naturally ask for this information? [Formulate question]
+4. What context from previous information should I include? [Add context]
+5. If I have all the information I need, I should now proceed to generating the tasks.
+
+Your output should follow this example format. DO NOT add any thing else apart from the JSON format below.
+
+{
+    'original_query': 'Plan my trip to London',
+    'trip_info':
+    {
+        'total_budget': '5000',
+        'origin': 'San Francisco',
+        'origin_airport': 'SFO',
+        'destination': 'London',
+        'destination_airport': 'LHR',
+        'type': 'business',
+        'start_date': '2025-05-12',
+        'end_date': '2025-05-20',
+        'travel_class': 'economy',
+        'accommodation_type': 'Hotel',
+        'room_type': 'Suite',
+        'checkin_date': '2025-05-12',
+        'checkout_date': '2025-05-20',
+        'is_car_rental_required': 'Yes',
+        'type_of_car': 'SUV',
+        'no_of_travellers': '1'
+    },
+    'tasks': [
+        {
+            'id': 1,
+            'description': 'Book round-trip economy class air tickets from San Francisco (SFO) to London (LHR) for the dates May 12, 2025 to May 20, 2025.',
+            'status': 'pending'
+        }, 
+        {
+            'id': 2,
+            'description': 'Book a suite room at a hotel in London for checkin date May 12, 2025 and checkout date May 20th 2025',
+            'status': 'pending'
+        },
+        {
+            'id': 3,
+            'description': 'Book an SUV rental car in London with a pickup on May 12, 2025 and return on May 20, 2025', 
+            'status': 'pending'
+        }
+    ]
+}
+
+"""
+
+# System Instructions to the Summary Generator
+SUMMARY_COT_INSTRUCTIONS = """
+    You are a travel booking assistant that creates comprehensive summaries of travel arrangements. 
+    Use the following chain of thought process to systematically analyze the travel data provided in triple backticks generate a detailed summary.
+
+    ## Chain of Thought Process
+
+    ### Step 1: Data Parsing and Validation
+    First, carefully parse the provided travel data:
+
+    **Think through this systematically:**
+    - Parse the data structure and identify all travel components
+
+    ### Step 2: Flight Information Analysis
+    **For each flight in the data, extract:**
+
+    *Reasoning: I need to capture all flight details for complete air travel summary*
+
+    - Route information (departure/arrival cities and airports)
+    - Schedule details (dates, times, duration)
+    - Airline information and flight numbers
+    - Cabin class
+    - Cost breakdown per passenger
+    - Total cost
+
+    ### Step 3: Hotel Information Analysis
+    **For accommodation details, identify:**
+
+    *Reasoning: Hotel information is essential for complete trip coordination*
+
+    - Property name, and location
+    - Check-in and check-out dates/times
+    - Room type
+    - Total nights and nightly rates
+    - Total cost
+
+    ### Step 4: Car Rental Analysis
+    **For vehicle rental information, extract:**
+
+    *Reasoning: Ground transportation affects the entire travel experience*
+
+    - Rental company and vehicle details
+    - Pickup and return locations/times
+    - Rental duration and daily rates
+    - Total cost
+
+    ### Step 5: Budget Analysis
+    **Calculate comprehensive cost breakdown:**
+
+    *Reasoning: Financial summary helps with expense tracking and budget management*
+
+    - Individual cost categories (flights, hotels, car rental)
+    - Total trip cost and per-person costs
+    - Budget comparison if original budget provided
+
+    ## Input Travel Data:
+    ```{travel_data}```
+
+    ## Instructions:
+
+    Based on the travel data provided above, use your chain of thought process to analyze the travel information and generate a comprehensive summary in the following format:
+
+    ## Travel Booking Summary
+
+    ### Trip Overview
+    - **Travelers:** [Number from the travel data]
+    - **Destination(s):** [Primary destinations]
+    - **Travel Dates:** [Overall trip duration]
+
+    **Outbound Journey:**
+    - Route: [Departure] → [Arrival]
+    - Date & Time: [Departure date/time] | Arrival: [Arrival date/time, if available]
+    - Airline: [Airline] Flight [Number]
+    - Class: [Cabin class]
+    - Passengers: [Number]
+    - Cost: [Outbound journey cost]
+
+    **Return Journey:**
+    - Route: [Departure] → [Arrival]
+    - Date & Time: [Departure date/time] | Arrival: [Arrival date/time, if available]
+    - Airline: [Airline] Flight [Number]
+    - Class: [Cabin class]
+    - Passengers: [Number]
+    - Cost: [Return journey cost]
+
+    ### Accommodation Details
+    **Hotel:** [Hotel name]
+    - **Location:** [City]
+    - **Check-in:** [Date] at [Time]
+    - **Check-out:** [Date] at [Time]
+    - **Duration:** [Number] nights
+    - **Room:** [Room type] for [Number] guests
+    - **Rate:** [Nightly rate] × [Nights] = [Total cost]
+
+    ### Ground Transportation
+    **Car Rental:** [Company]
+    - **Vehicle:** [Vehicle type/category]
+    - **Pickup:** [Date/Time] from [Location]
+    - **Return:** [Date/Time] to [Location]
+    - **Duration:** [Number] days
+    - **Rate:** [Daily rate] × [Days] = [Total cost]
+
+    ### Financial Summary
+    **Total Trip Cost:** [Currency] [Grand total]
+    - Flights: [Currency] [Amount]
+    - Accommodation: [Currency] [Amount]
+    - Car Rental: [Currency] [Amount]
+
+    **Per Person Cost:** [Currency] [Amount] *(if multiple travelers)*
+    **Budget Status:** [Over/Under budget by amount, if original budget provided]
+"""
+
+QA_COT_PROMPT = """
+You are an AI assistant that answers questions about trip details based on provided JSON context and the conversation history. Follow this step-by-step reasoning process:
+
+
+Instructions:
+
+Step 1: Context Analysis
+    -- Carefully read and understand the provided Conversation History and the JSON context containing trip details
+    -- Identify all available information fields (dates, locations, preferences, bookings, etc.)
+    -- Note what information is present and what might be missing
+
+Step 2: Question Understanding
+
+    -- Parse the question to understand exactly what information is being requested
+    -- Identify the specific data points needed to answer the question
+    -- Determine if the question is asking for factual information, preferences, or derived conclusions
+
+Step 3: Information Matching
+    -- Search through the JSON context for relevant information
+    -- Check if all required data points to answer the question are available
+    -- Consider if partial information exists that could lead to an incomplete answer
+
+Step 4: Answer Determination
+    -- If all necessary information is present in the context: formulate a complete answer
+    -- If some information is missing but a partial answer is possible: determine if it's sufficient
+    -- If critical information is missing: conclude that the question cannot be answered
+
+Step 5: Response Formatting
+    -- Provide your response in this exact JSON format:
+
+json
+
+{"can_answer": "yes" or "no","answer": "Your answer here" or "Cannot answer based on provided context"}
+
+Guidelines:
+
+Strictly adhere to the context: Only use information explicitly provided in the JSON
+
+No assumptions: Do not infer or assume information not present in the context
+
+Be precise: Answer exactly what is asked, not more or less
+
+Handle edge cases: If context is malformed or question is unclear, set can_answer to "no"
+
+Example Process:
+
+Context: {'total_budget': '9000', 'origin': 'San Francisco', 'destination': 'London', 'type': 'business', 'start_date': '2025-06-12', 'end_date': '2025-06-18', 'travel_class': 'business', 'accommodation_type': 'Hotel', 'room_type': 'Suite', 'is_car_rental_required': 'Yes', 'type_of_car': 'Sedan', 'no_of_travellers': '1', 'checkin_date': '2025-06-12', 'checkout_date': '2025-06-18', 'car_rental_start_date': '2025-06-12', 'car_rental_end_date': '2025-06-18'}
+
+History: {"contextId":"b5a4f803-80f3-4524-b93d-b009219796ac","history":[{"contextId":"b5a4f803-80f3-4524-b93d-b009219796ac","kind":"message","messageId":"f4ced6dd-a7fd-4a4e-8f4a-30a37e62e81b","parts":[{"kind":"text","text":"Plan my trip to London"}],"role":"user","taskId":"a53e8d32-8119-4864-aba7-4ea1db39437d"}]}}
+
+
+Question: "Do I need a rental car for this trip?"
+
+Reasoning:
+
+Context contains trip details with transportation preferences
+
+Question asks about rental car requirement
+
+Context shows "is_car_rental_required": yes
+
+Information is directly available and complete
+
+Response:
+
+json
+
+{"can_answer": "yes","answer": "Yes, the user needs a rental car for this trip"}
+
+Now apply this reasoning process to answer questions based on the provided trip context.
+
+
+Context: ```{TRIP_CONTEXT}```
+History: ```{CONVERSATION_HISTORY}```
+Question: ```{TRIP_QUESTION}```
+"""
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/types.py
+================================================
+# type: ignore
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class ServerConfig(BaseModel):
+    """Server Confgiguration."""
+
+    host: str
+    port: int
+    transport: str
+    url: str
+
+
+class PlannerTask(BaseModel):
+    """Represents a single task generated by the Planner."""
+
+    id: int = Field(description='Sequential ID for the task.')
+    description: str = Field(
+        description='Clear description of the task to be executed.'
+    )
+    status: (
+        Any
+        | Literal[
+            'input_required',
+            'completed',
+            'error',
+            'pending',
+            'incomplete',
+            'todo',
+            'not_started',
+        ]
+        | None
+    ) = Field(description='Status of the task', default='input_required')
+
+
+class TripInfo(BaseModel):
+    """Trip Info."""
+
+    total_budget: str | None = Field(description='Total Budget for the trip')
+    origin: str | None = Field(description='Trip Origin')
+    destination: str | None = Field(description='Trip destination')
+    type: str | None = Field(description='Trip type, business or leisure')
+    start_date: str | None = Field(description='Trip Start Date')
+    end_date: str | None = Field(description='Trip End Date')
+    travel_class: str | None = Field(
+        description='Travel class, first, business or economy'
+    )
+    accommodation_type: str | None = Field(
+        description='Luxury Hotel, Budget Hotel, AirBnB, etc'
+    )
+    room_type: str | None = Field(description='Suite, Single, Double etc.')
+    is_car_rental_required: str | None = Field(
+        description='Whether a rental car is required in the trip.'
+    )
+    type_of_car: str | None = Field(
+        description='Type of the car, SUV, Sedan, Truck etc.'
+    )
+    no_of_travellers: str | None = Field(
+        description='Total number of travellers in the trip'
+    )
+
+    checkin_date: str | None = Field(description='Hotel Checkin Date')
+    checkout_date: str | None = Field(description='Hotel Checkout Date')
+    car_rental_start_date: str | None = Field(
+        description='Car Rental Start Date'
+    )
+    car_rental_end_date: str | None = Field(description='Car Rental End Date')
+
+    @model_validator(mode='before')
+    @classmethod
+    def set_dependent_var(cls, values):
+        """Pydantic dependent setters."""
+        if isinstance(values, dict) and 'start_date' in values:
+            values['checkin_date'] = values['start_date']
+
+        if isinstance(values, dict) and 'end_date' in values:
+            values['checkout_date'] = values['end_date']
+
+        if isinstance(values, dict) and 'start_date' in values:
+            values['car_rental_start_date'] = values['start_date']
+
+        if isinstance(values, dict) and 'end_date' in values:
+            values['car_rental_end_date'] = values['end_date']
+        return values
+
+
+class TaskList(BaseModel):
+    """Output schema for the Planner Agent."""
+
+    original_query: str | None = Field(
+        description='The original user query for context.'
+    )
+
+    trip_info: TripInfo | None = Field(description='Trip information')
+
+    tasks: list[PlannerTask] = Field(
+        description='A list of tasks to be executed sequentially.'
+    )
+
+
+class AgentResponse(BaseModel):
+    """Output schema for the Agent."""
+
+    content: str | dict = Field(description='The content of the response.')
+    is_task_complete: bool = Field(description='Whether the task is complete.')
+    require_user_input: bool = Field(
+        description='Whether the agent requires user input.'
+    )
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/utils.py
+================================================
+# type: ignore
+import logging
+import os
+
+import google.generativeai as genai
+
+from a2a_mcp.common.types import ServerConfig
+
+
+logger = logging.getLogger(__name__)
+
+
+def init_api_key():
+    """Initialize the API key for Google Generative AI."""
+    if not os.getenv('GOOGLE_API_KEY'):
+        logger.error('GOOGLE_API_KEY is not set')
+        raise ValueError('GOOGLE_API_KEY is not set')
+
+    genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+
+
+def config_logging():
+    """Configure basic logging."""
+    log_level = (
+        os.getenv('A2A_LOG_LEVEL') or os.getenv('FASTMCP_LOG_LEVEL') or 'INFO'
+    ).upper()
+    logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
+
+
+def config_logger(logger):
+    """Logger specific config, avoiding clutter in enabling all loggging."""
+    # TODO: replace with env
+    logger.setLevel(logging.INFO)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+
+def get_mcp_server_config() -> ServerConfig:
+    """Get the MCP server configuration."""
+    return ServerConfig(
+        host='localhost',
+        port=10100,
+        transport='sse',
+        url='http://localhost:10100/sse',
+    )
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/common/workflow.py
+================================================
+import json
+import logging
+import uuid
+
+from collections.abc import AsyncIterable
+from enum import Enum
+from uuid import uuid4
+
+import httpx
+import networkx as nx
+
+from a2a.client import A2AClient
+from a2a.types import (
+    AgentCard,
+    MessageSendParams,
+    SendStreamingMessageRequest,
+    SendStreamingMessageSuccessResponse,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatusUpdateEvent,
+)
+from a2a_mcp.common.utils import get_mcp_server_config
+from a2a_mcp.mcp import client
+
+
+logger = logging.getLogger(__name__)
+
+
+class Status(Enum):
+    """Represents the status of a workflow and its associated node."""
+
+    READY = 'READY'
+    RUNNING = 'RUNNING'
+    COMPLETED = 'COMPLETED'
+    PAUSED = 'PAUSED'
+    INITIALIZED = 'INITIALIZED'
+
+
+class WorkflowNode:
+    """Represents a single node in a workflow graph.
+
+    Each node encapsulates a specific task to be executed, such as finding an
+    agent or invoking an agent's capabilities. It manages its own state
+    (e.g., READY, RUNNING, COMPLETED, PAUSED) and can execute its assigned task.
+
+    """
+
+    def __init__(
+        self,
+        task: str,
+        node_key: str | None = None,
+        node_label: str | None = None,
+    ):
+        self.id = str(uuid.uuid4())
+        self.node_key = node_key
+        self.node_label = node_label
+        self.task = task
+        self.results = None
+        self.state = Status.READY
+
+    async def get_planner_resource(self) -> AgentCard | None:
+        logger.info(f'Getting resource for node {self.id}')
+        config = get_mcp_server_config()
+        async with client.init_session(
+            config.host, config.port, config.transport
+        ) as session:
+            response = await client.find_resource(
+                session, 'resource://agent_cards/planner_agent'
+            )
+            data = json.loads(response.contents[0].text)
+            return AgentCard(**data['agent_card'][0])
+
+    async def find_agent_for_task(self) -> AgentCard | None:
+        logger.info(f'Find agent for task - {self.task}')
+        config = get_mcp_server_config()
+        async with client.init_session(
+            config.host, config.port, config.transport
+        ) as session:
+            result = await client.find_agent(session, self.task)
+            agent_card_json = json.loads(result.content[0].text)
+            logger.debug(f'Found agent {agent_card_json} for task {self.task}')
+            return AgentCard(**agent_card_json)
+
+    async def run_node(
+        self,
+        query: str,
+        task_id: str,
+        context_id: str,
+    ) -> AsyncIterable[dict[str, any]]:
+        logger.info(f'Executing node {self.id}')
+        agent_card = None
+        if self.node_key == 'planner':
+            agent_card = await self.get_planner_resource()
+        else:
+            agent_card = await self.find_agent_for_task()
+        async with httpx.AsyncClient() as httpx_client:
+            client = A2AClient(httpx_client, agent_card)
+
+            payload: dict[str, any] = {
+                'message': {
+                    'role': 'user',
+                    'parts': [{'kind': 'text', 'text': query}],
+                    'messageId': uuid4().hex,
+                    'taskId': task_id,
+                    'contextId': context_id,
+                },
+            }
+            request = SendStreamingMessageRequest(
+                id=str(uuid4()), params=MessageSendParams(**payload)
+            )
+            response_stream = client.send_message_streaming(request)
+            async for chunk in response_stream:
+                # Save the artifact as a result of the node
+                if isinstance(
+                    chunk.root, SendStreamingMessageSuccessResponse
+                ) and (isinstance(chunk.root.result, TaskArtifactUpdateEvent)):
+                    artifact = chunk.root.result.artifact
+                    self.results = artifact
+                yield chunk
+
+
+class WorkflowGraph:
+    """Represents a graph of workflow nodes."""
+
+    def __init__(self) -> None:
+        self.graph = nx.DiGraph()
+        self.nodes = {}
+        self.latest_node = None
+        self.node_type = None
+        self.state = Status.INITIALIZED
+        self.paused_node_id = None
+
+    def add_node(self, node) -> None:
+        logger.info(f'Adding node {node.id}')
+        self.graph.add_node(node.id, query=node.task)
+        self.nodes[node.id] = node
+        self.latest_node = node.id
+
+    def add_edge(self, from_node_id: str, to_node_id: str) -> None:
+        if from_node_id not in self.nodes or to_node_id not in self.nodes:
+            raise ValueError('Invalid node IDs')
+
+        self.graph.add_edge(from_node_id, to_node_id)
+
+    async def run_workflow(
+        self, start_node_id: str | None = None
+    ) -> AsyncIterable[dict[str, any]]:
+        logger.info('Executing workflow graph')
+        if not start_node_id or start_node_id not in self.nodes:
+            start_nodes = [n for n, d in self.graph.in_degree() if d == 0]
+        else:
+            start_nodes = [self.nodes[start_node_id].id]
+
+        applicable_graph = set()
+
+        for node_id in start_nodes:
+            applicable_graph.add(node_id)
+            applicable_graph.update(nx.descendants(self.graph, node_id))
+
+        complete_graph = list(nx.topological_sort(self.graph))
+        sub_graph = [n for n in complete_graph if n in applicable_graph]
+        logger.info(f'Sub graph {sub_graph} size {len(sub_graph)}')
+        self.state = Status.RUNNING
+        # Alternative is to loop over all nodes, but we only need the connected nodes.
+        for node_id in sub_graph:
+            node = self.nodes[node_id]
+            node.state = Status.RUNNING
+            query = self.graph.nodes[node_id].get('query')
+            task_id = self.graph.nodes[node_id].get('task_id')
+            context_id = self.graph.nodes[node_id].get('context_id')
+            async for chunk in node.run_node(query, task_id, context_id):
+                # When the workflow node is paused, do not yield any chunks
+                # but, let the loop complete.
+                if node.state != Status.PAUSED:
+                    if isinstance(
+                        chunk.root, SendStreamingMessageSuccessResponse
+                    ) and (
+                        isinstance(chunk.root.result, TaskStatusUpdateEvent)
+                    ):
+                        task_status_event = chunk.root.result
+                        context_id = task_status_event.context_id
+                        if (
+                            task_status_event.status.state
+                            == TaskState.input_required
+                            and context_id
+                        ):
+                            node.state = Status.PAUSED
+                            self.state = Status.PAUSED
+                            self.paused_node_id = node.id
+                    yield chunk
+            if self.state == Status.PAUSED:
+                break
+            if node.state == Status.RUNNING:
+                node.state = Status.COMPLETED
+        if self.state == Status.RUNNING:
+            self.state = Status.COMPLETED
+
+    def set_node_attribute(self, node_id, attribute, value) -> None:
+        nx.set_node_attributes(self.graph, {node_id: value}, attribute)
+
+    def set_node_attributes(self, node_id, attr_val) -> None:
+        nx.set_node_attributes(self.graph, {node_id: attr_val})
+
+    def is_empty(self) -> bool:
+        return self.graph.number_of_nodes() == 0
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/mcp/client.py
+================================================
+# type:ignore
+import asyncio
+import json
+import os
+
+from contextlib import asynccontextmanager
+
+import click
+
+from fastmcp.utilities.logging import get_logger
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
+from mcp.types import CallToolResult, ReadResourceResult
+
+
+logger = get_logger(__name__)
+
+env = {
+    'GOOGLE_API_KEY': os.getenv('GOOGLE_API_KEY'),
+}
+
+
+@asynccontextmanager
+async def init_session(host, port, transport):
+    """Initializes and manages an MCP ClientSession based on the specified transport.
+
+    This asynchronous context manager establishes a connection to an MCP server
+    using either Server-Sent Events (SSE) or Standard I/O (STDIO) transport.
+    It handles the setup and teardown of the connection and yields an active
+    `ClientSession` object ready for communication.
+
+    Args:
+        host: The hostname or IP address of the MCP server (used for SSE).
+        port: The port number of the MCP server (used for SSE).
+        transport: The communication transport to use ('sse' or 'stdio').
+
+    Yields:
+        ClientSession: An initialized and ready-to-use MCP client session.
+
+    Raises:
+        ValueError: If an unsupported transport type is provided (implicitly,
+                    as it won't match 'sse' or 'stdio').
+        Exception: Other potential exceptions during client initialization or
+                   session setup.
+    """
+    if transport == 'sse':
+        url = f'http://{host}:{port}/sse'
+        async with sse_client(url) as (read_stream, write_stream):
+            async with ClientSession(
+                read_stream=read_stream, write_stream=write_stream
+            ) as session:
+                logger.debug('SSE ClientSession created, initializing...')
+                await session.initialize()
+                logger.info('SSE ClientSession initialized successfully.')
+                yield session
+    elif transport == 'stdio':
+        if not os.getenv('GOOGLE_API_KEY'):
+            logger.error('GOOGLE_API_KEY is not set')
+            raise ValueError('GOOGLE_API_KEY is not set')
+        stdio_params = StdioServerParameters(
+            command='uv',
+            args=['run', 'a2a-mcp'],
+            env=env,
+        )
+        async with stdio_client(stdio_params) as (read_stream, write_stream):
+            async with ClientSession(
+                read_stream=read_stream,
+                write_stream=write_stream,
+            ) as session:
+                logger.debug('STDIO ClientSession created, initializing...')
+                await session.initialize()
+                logger.info('STDIO ClientSession initialized successfully.')
+                yield session
+    else:
+        logger.error(f'Unsupported transport type: {transport}')
+        raise ValueError(
+            f"Unsupported transport type: {transport}. Must be 'sse' or 'stdio'."
+        )
+
+
+async def find_agent(session: ClientSession, query) -> CallToolResult:
+    """Calls the 'find_agent' tool on the connected MCP server.
+
+    Args:
+        session: The active ClientSession.
+        query: The natural language query to send to the 'find_agent' tool.
+
+    Returns:
+        The result of the tool call.
+    """
+    logger.info(f"Calling 'find_agent' tool with query: '{query[:50]}...'")
+    return await session.call_tool(
+        name='find_agent',
+        arguments={
+            'query': query,
+        },
+    )
+
+
+async def find_resource(session: ClientSession, resource) -> ReadResourceResult:
+    """Reads a resource from the connected MCP server.
+
+    Args:
+        session: The active ClientSession.
+        resource: The URI of the resource to read (e.g., 'resource://agent_cards/list').
+
+    Returns:
+        The result of the resource read operation.
+    """
+    logger.info(f'Reading resource: {resource}')
+    return await session.read_resource(resource)
+
+
+async def search_flights(session: ClientSession) -> CallToolResult:
+    """Calls the 'search_flights' tool on the connected MCP server.
+
+    Args:
+        session: The active ClientSession.
+        query: The natural language query to send to the 'search_flights' tool.
+
+    Returns:
+        The result of the tool call.
+    """
+    # TODO: Implementation pending
+    logger.info("Calling 'search_flights' tool'")
+    return await session.call_tool(
+        name='search_flights',
+        arguments={
+            'departure_airport': 'SFO',
+            'arrival_airport': 'LHR',
+            'start_date': '2025-06-03',
+            'end_date': '2025-06-09',
+        },
+    )
+
+
+async def search_hotels(session: ClientSession) -> CallToolResult:
+    """Calls the 'search_hotels' tool on the connected MCP server.
+
+    Args:
+        session: The active ClientSession.
+        query: The natural language query to send to the 'search_hotels' tool.
+
+    Returns:
+        The result of the tool call.
+    """
+    # TODO: Implementation pending
+    logger.info("Calling 'search_hotels' tool'")
+    return await session.call_tool(
+        name='search_hotels',
+        arguments={
+            'location': 'A Suite room in St Pancras Square in London',
+            'check_in_date': '2025-06-03',
+            'check_out_date': '2025-06-09',
+        },
+    )
+
+
+async def query_db(session: ClientSession) -> CallToolResult:
+    """Calls the 'query' tool on the connected MCP server.
+
+    Args:
+        session: The active ClientSession.
+        query: The natural language query to send to the 'query_db' tool.
+
+    Returns:
+        The result of the tool call.
+    """
+    logger.info("Calling 'query_db' tool'")
+    return await session.call_tool(
+        name='query_travel_data',
+        arguments={
+            'query': "SELECT id, name, city, hotel_type, room_type, price_per_night FROM hotels WHERE city='London'",
+        },
+    )
+
+
+# Test util
+async def main(host, port, transport, query, resource, tool):
+    """Main asynchronous function to connect to the MCP server and execute commands.
+
+    Used for local testing.
+
+    Args:
+        host: Server hostname.
+        port: Server port.
+        transport: Connection transport ('sse' or 'stdio').
+        query: Optional query string for the 'find_agent' tool.
+        resource: Optional resource URI to read.
+        tool: Optional tool name to execute. Valid options are:
+            'search_flights', 'search_hotels', or 'query_db'.
+    """
+    logger.info('Starting Client to connect to MCP')
+    async with init_session(host, port, transport) as session:
+        if query:
+            result = await find_agent(session, query)
+            data = json.loads(result.content[0].text)
+            logger.info(json.dumps(data, indent=2))
+        if resource:
+            result = await find_resource(session, resource)
+            logger.info(result)
+            data = json.loads(result.contents[0].text)
+            logger.info(json.dumps(data, indent=2))
+        if tool:
+            if tool == 'search_flights':
+                results = await search_flights(session)
+                logger.info(results.model_dump())
+            if tool == 'search_hotels':
+                result = await search_hotels(session)
+                data = json.loads(result.content[0].text)
+                logger.info(json.dumps(data, indent=2))
+            if tool == 'query_db':
+                result = await query_db(session)
+                logger.info(result)
+                data = json.loads(result.content[0].text)
+                logger.info(json.dumps(data, indent=2))
+
+
+# Command line tester
+@click.command()
+@click.option('--host', default='localhost', help='SSE Host')
+@click.option('--port', default='10100', help='SSE Port')
+@click.option('--transport', default='stdio', help='MCP Transport')
+@click.option('--find_agent', help='Query to find an agent')
+@click.option('--resource', help='URI of the resource to locate')
+@click.option('--tool_name', type=click.Choice(['search_flights', 'search_hotels', 'query_db']),
+              help='Tool to execute: search_flights, search_hotels, or query_db')
+def cli(host, port, transport, find_agent, resource, tool_name):
+    """A command-line client to interact with the Agent Cards MCP server."""
+    asyncio.run(main(host, port, transport, find_agent, resource, tool_name))
+
+
+if __name__ == '__main__':
+    cli()
+
+
+
+================================================
+FILE: samples/python/agents/a2a_mcp/src/a2a_mcp/mcp/server.py
+================================================
+# type: ignore
+import json
+import os
+import sqlite3
+import traceback
+
+from pathlib import Path
+
+import google.generativeai as genai
+import numpy as np
+import pandas as pd
+import requests
+
+from a2a_mcp.common.utils import init_api_key
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.utilities.logging import get_logger
+
+
+logger = get_logger(__name__)
+AGENT_CARDS_DIR = 'agent_cards'
+MODEL = 'models/embedding-001'
+SQLLITE_DB = 'travel_agency.db'
+PLACES_API_URL = 'https://places.googleapis.com/v1/places:searchText'
+
+
+def generate_embeddings(text):
+    """Generates embeddings for the given text using Google Generative AI.
+
+    Args:
+        text: The input string for which to generate embeddings.
+
+    Returns:
+        A list of embeddings representing the input text.
+    """
+    return genai.embed_content(
+        model=MODEL,
+        content=text,
+        task_type='retrieval_document',
+    )['embedding']
+
+
+def load_agent_cards():
+    """Loads agent card data from JSON files within a specified directory.
+
+    Returns:
+        A list containing JSON data from an agent card file found in the specified directory.
+        Returns an empty list if the directory is empty, contains no '.json' files,
+        or if all '.json' files encounter errors during processing.
+    """
+    card_uris = []
+    agent_cards = []
+    dir_path = Path(AGENT_CARDS_DIR)
+    if not dir_path.is_dir():
+        logger.error(
+            f'Agent cards directory not found or is not a directory: {AGENT_CARDS_DIR}'
+        )
+        return agent_cards
+
+    logger.info(f'Loading agent cards from card repo: {AGENT_CARDS_DIR}')
+
+    for filename in os.listdir(AGENT_CARDS_DIR):
+        if filename.lower().endswith('.json'):
+            file_path = dir_path / filename
+
+            if file_path.is_file():
+                logger.info(f'Reading file: {filename}')
+                try:
+                    with file_path.open('r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        card_uris.append(
+                            f'resource://agent_cards/{Path(filename).stem}'
+                        )
+                        agent_cards.append(data)
+                except json.JSONDecodeError as jde:
+                    logger.error(f'JSON Decoder Error {jde}')
+                except OSError as e:
+                    logger.error(f'Error reading file {filename}: {e}.')
+                except Exception as e:
+                    logger.error(
+                        f'An unexpected error occurred processing {filename}: {e}',
+                        exc_info=True,
+                    )
+    logger.info(
+        f'Finished loading agent cards. Found {len(agent_cards)} cards.'
+    )
+    return card_uris, agent_cards
+
+
+def build_agent_card_embeddings() -> pd.DataFrame:
+    """Loads agent cards, generates embeddings for them, and returns a DataFrame.
+
+    Returns:
+        Optional[pd.DataFrame]: A Pandas DataFrame containing the original
+        'agent_card' data and their corresponding 'Embeddings'. Returns None
+        if no agent cards were loaded initially or if an exception occurred
+        during the embedding generation process.
+    """
+    card_uris, agent_cards = load_agent_cards()
+    logger.info('Generating Embeddings for agent cards')
+    try:
+        if agent_cards:
+            df = pd.DataFrame(
+                {'card_uri': card_uris, 'agent_card': agent_cards}
+            )
+            df['card_embeddings'] = df.apply(
+                lambda row: generate_embeddings(json.dumps(row['agent_card'])),
+                axis=1,
+            )
+            return df
+        logger.info('Done generating embeddings for agent cards')
+    except Exception as e:
+        logger.error(f'An unexpected error occurred : {e}.', exc_info=True)
+        return None
+
+
+def serve(host, port, transport):  # noqa: PLR0915
+    """Initializes and runs the Agent Cards MCP server.
+
+    Args:
+        host: The hostname or IP address to bind the server to.
+        port: The port number to bind the server to.
+        transport: The transport mechanism for the MCP server (e.g., 'stdio', 'sse').
+
+    Raises:
+        ValueError: If the 'GOOGLE_API_KEY' environment variable is not set.
+    """
+    init_api_key()
+    logger.info('Starting Agent Cards MCP Server')
+    mcp = FastMCP('agent-cards', host=host, port=port)
+
+    df = build_agent_card_embeddings()
+
+    @mcp.tool(
+        name='find_agent',
+        description='Finds the most relevant agent card based on a natural language query string.',
+    )
+    def find_agent(query: str) -> str:
+        """Finds the most relevant agent card based on a query string.
+
+        This function takes a user query, typically a natural language question or a task generated by an agent,
+        generates its embedding, and compares it against the
+        pre-computed embeddings of the loaded agent cards. It uses the dot
+        product to measure similarity and identifies the agent card with the
+        highest similarity score.
+
+        Args:
+            query: The natural language query string used to search for a
+                   relevant agent.
+
+        Returns:
+            The json representing the agent card deemed most relevant
+            to the input query based on embedding similarity.
+        """
+        query_embedding = genai.embed_content(
+            model=MODEL, content=query, task_type='retrieval_query'
+        )
+        dot_products = np.dot(
+            np.stack(df['card_embeddings']), query_embedding['embedding']
+        )
+        best_match_index = np.argmax(dot_products)
+        logger.debug(
+            f'Found best match at index {best_match_index} with score {dot_products[best_match_index]}'
+        )
+        return df.iloc[best_match_index]['agent_card']
+
+    @mcp.tool()
+    def query_places_data(query: str):
+        """Query Google Places."""
+        logger.info(f'Search for places : {query}')
+        api_key = os.getenv('GOOGLE_PLACES_API_KEY')
+        if not api_key:
+            logger.info('GOOGLE_PLACES_API_KEY is not set')
+            return {'places': []}
+
+        headers = {
+            'X-Goog-Api-Key': api_key,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
+            'Content-Type': 'application/json',
+        }
+        payload = {
+            'textQuery': query,
+            'languageCode': 'en',
+            'maxResultCount': 10,
+        }
+
+        try:
+            response = requests.post(
+                PLACES_API_URL, headers=headers, json=payload
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as http_err:
+            logger.info(f'HTTP error occurred: {http_err}')
+            logger.info(f'Response content: {response.text}')
+        except requests.exceptions.ConnectionError as conn_err:
+            logger.info(f'Connection error occurred: {conn_err}')
+        except requests.exceptions.Timeout as timeout_err:
+            logger.info(f'Timeout error occurred: {timeout_err}')
+        except requests.exceptions.RequestException as req_err:
+            logger.info(
+                f'An unexpected error occurred with the request: {req_err}'
+            )
+        except json.JSONDecodeError:
+            logger.info(
+                f'Failed to decode JSON response. Raw response: {response.text}'
+            )
+
+        return {'places': []}
+
+    @mcp.tool()
+    def query_travel_data(query: str) -> dict:
+        """ "name": "query_travel_data",
+        "description": "Retrieves the most up-to-date, ariline, hotel and car rental availability. Helps with the booking.
+        This tool should be used when a user asks for the airline ticket booking, hotel or accommodation booking, or car rental reservations.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+            "query": {
+                "type": "string",
+                "description": "A SQL to run against the travel database."
+            }
+            },
+            "required": ["query"]
+        }
+        """
+        # The above is to influence gemini to pickup the tool.
+        logger.info(f'Query sqllite : {query}')
+
+        if not query or not query.strip().upper().startswith('SELECT'):
+            raise ValueError(f'In correct query {query}')
+
+        try:
+            with sqlite3.connect(SQLLITE_DB) as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                result = {'results': [dict(row) for row in rows]}
+                return json.dumps(result)
+        except Exception as e:
+            logger.error(f'Exception running query {e}')
+            logger.error(traceback.format_exc())
+            if 'no such column' in e:
+                return {
+                    'error': f'Please check your query, {e}. Use the table schema to regenerate the query'
+                }
+            return {'error': {e}}
+
+    @mcp.resource('resource://agent_cards/list', mime_type='application/json')
+    def get_agent_cards() -> dict:
+        """Retrieves all loaded agent cards as a json / dictionary for the MCP resource endpoint.
+
+        This function serves as the handler for the MCP resource identified by
+        the URI 'resource://agent_cards/list'.
+
+        Returns:
+            A json / dictionary structured as {'agent_cards': [...]}, where the value is a
+            list containing all the loaded agent card dictionaries. Returns
+            {'agent_cards': []} if the data cannot be retrieved.
+        """
+        resources = {}
+        logger.info('Starting read resources')
+        resources['agent_cards'] = df['card_uri'].to_list()
+        return resources
+
+    @mcp.resource(
+        'resource://agent_cards/{card_name}', mime_type='application/json'
+    )
+    def get_agent_card(card_name: str) -> dict:
+        """Retrieves an agent card as a json / dictionary for the MCP resource endpoint.
+
+        This function serves as the handler for the MCP resource identified by
+        the URI 'resource://agent_cards/{card_name}'.
+
+        Returns:
+            A json / dictionary
+        """
+        resources = {}
+        logger.info(
+            f'Starting read resource resource://agent_cards/{card_name}'
+        )
+        resources['agent_card'] = (
+            df.loc[
+                df['card_uri'] == f'resource://agent_cards/{card_name}',
+                'agent_card',
+            ]
+        ).to_list()
+
+        return resources
+
+    logger.info(
+        f'Agent cards MCP Server at {host}:{port} and transport {transport}'
+    )
+    mcp.run(transport=transport)
+
+

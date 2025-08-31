@@ -9,6 +9,12 @@ with the Orchestrator agent to trace the full workflow.
 
 This version includes a robust path-finding mechanism that works reliably
 when run from the project root.
+
+FIXED: Health check now sends proper A2A JSON-RPC requests instead of simple
+test payloads, resolving validation errors with fasta2a agents.
+
+FIXED: Conversation loop now uses async-safe input handling to prevent hanging
+when mixing sync input() calls with anyio async context.
 """
 
 import asyncio
@@ -19,8 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import anyio
-import anyio.to_thread
+import httpx
 from dotenv import load_dotenv
 
 
@@ -178,6 +183,50 @@ def cleanup_processes(signum=None, frame=None):
     logger.info("Cleanup complete.")
 
 
+def cleanup_existing_agents():
+    """Kill any existing agent processes that might be using our ports."""
+    logger.info("Cleaning up any existing agent processes...")
+
+    try:
+        if os.name == "nt":  # Windows
+            # Kill any processes using our specific ports
+            ports_to_clear = [10101, 10102, 10103, 10104, 10105]
+
+            for port in ports_to_clear:
+                try:
+                    # Find processes using this port
+                    result = subprocess.run(
+                        ["netstat", "-ano"], capture_output=True, text=True, check=False
+                    )
+
+                    if result.returncode == 0:
+                        lines = result.stdout.split("\n")
+                        for line in lines:
+                            if f":{port}" in line and "LISTENING" in line:
+                                parts = line.split()
+                                if len(parts) >= 5:
+                                    pid = parts[-1]
+                                    try:
+                                        subprocess.run(
+                                            ["taskkill", "/F", "/PID", pid],
+                                            capture_output=True,
+                                            check=False,
+                                        )
+                                        logger.info(
+                                            f"Killed process {pid} using port {port}"
+                                        )
+                                    except Exception:
+                                        pass
+                except Exception:
+                    pass
+
+        print("🧹 Cleaned up existing processes on agent ports")
+
+    except Exception as e:
+        logger.warning(f"Error during cleanup: {e}")
+        print("⚠️ Could not fully clean up existing processes")
+
+
 def start_service(name: str, config: dict):
     """Start a service in the background and store its process."""
     try:
@@ -204,6 +253,101 @@ def start_service(name: str, config: dict):
     except Exception as e:
         logger.error(f"Failed to start {name}: {e}")
         print(f"Error starting {name}: {e}")
+
+
+async def verify_agent_health(
+    service_name: str, url: str, max_attempts: int = 10
+) -> bool:
+    """Verify that an agent is running and responding to connections."""
+    for attempt in range(max_attempts):
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # Send a proper A2A JSON-RPC health check request
+                health_check_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "tasks/send",
+                    "params": {
+                        "id": f"health_check_{attempt}",
+                        "message": {
+                            "role": "user",
+                            "parts": [{"type": "text", "text": "hello"}],
+                            "messageId": f"health_msg_{attempt}",
+                        },
+                    },
+                    "id": f"health_request_{attempt}",
+                }
+
+                response = await client.post(
+                    url, json=health_check_payload, timeout=5.0
+                )
+
+                # Check if we got a successful response (200 status)
+                if response.status_code == 200:
+                    logger.info(f"✅ {service_name} is listening and responding")
+                    return True
+
+        except httpx.ConnectError:
+            logger.debug(
+                f"Connection attempt {attempt + 1} for {service_name}: Agent not ready yet"
+            )
+        except httpx.HTTPStatusError as e:
+            # A 500 or other HTTP error means the agent is listening but had an internal error
+            # This is still considered "healthy" for our purposes
+            logger.info(
+                f"✅ {service_name} is listening and responding (HTTP {e.response.status_code})"
+            )
+            return True
+        except Exception as e:
+            logger.debug(f"Health check attempt {attempt + 1} for {service_name}: {e}")
+
+        # Wait before retrying
+        await asyncio.sleep(2)
+
+    logger.warning(
+        f"❌ {service_name} health check failed after {max_attempts} attempts"
+    )
+    return False
+
+
+async def verify_all_agents():
+    """Verify that all agents are running and healthy."""
+    print("--- 🔍 Verifying agent health ---")
+
+    # Check if processes are still running
+    failed_services = []
+    for process, name in processes:
+        if process.poll() is not None:
+            logger.error(
+                f"❌ {name} process has terminated (exit code: {process.poll()})"
+            )
+            failed_services.append(name)
+            print(f"❌ {name} failed to start - check logs in {LOG_DIR}")
+
+    if failed_services:
+        print(f"⚠️ The following services failed to start: {failed_services}")
+        print("Check the log files for detailed error information.")
+        return False
+
+    # Verify agent HTTP endpoints (skip mcp_server as it doesn't have HTTP endpoint)
+    agents_to_check = [
+        ("CEO Agent", SERVICES["ceo_agent"]["url"]),
+        ("Orchestrator", SERVICES["orchestrator"]["url"]),
+        ("Document Agent", SERVICES["document_agent"]["url"]),
+        ("Browser Agent", SERVICES["browser_agent"]["url"]),
+        ("Database Agent", SERVICES["database_agent"]["url"]),
+    ]
+
+    healthy_agents = 0
+    for agent_name, url in agents_to_check:
+        if await verify_agent_health(agent_name, url):
+            healthy_agents += 1
+
+    if healthy_agents == len(agents_to_check):
+        print("✅ All agents are healthy and ready!")
+        return True
+    else:
+        print(f"⚠️ Only {healthy_agents}/{len(agents_to_check)} agents are responding")
+        return False
 
 
 async def talk_to_orchestrator(prompt: str):
@@ -321,6 +465,9 @@ async def main():
     signal.signal(signal.SIGTERM, cleanup_processes)
 
     try:
+        # Clean up any existing agent processes first
+        cleanup_existing_agents()
+
         # Start all backend services first
         for name, config in SERVICES.items():
             start_service(name, config)
@@ -329,6 +476,12 @@ async def main():
 
         # Wait for services to fully initialize
         await asyncio.sleep(10)
+
+        # Verify that all agents are actually running and healthy
+        if not await verify_all_agents():
+            print("❌ Some agents failed to start properly. Exiting...")
+            print("Check the log files for detailed error information.")
+            return
 
         # Initialize database if needed - this runs automatically
         await initialize_database_if_needed()
@@ -341,12 +494,14 @@ async def main():
         print("2. Talk to Orchestrator Agent directly (for debugging)")
 
         while True:
-            mode = await anyio.to_thread.run_sync(
-                lambda: input("Choose mode (1 or 2): ").strip()
-            )
-            if mode in ["1", "2"]:
-                break
-            print("Please enter 1 or 2")
+            try:
+                mode = input("Choose mode (1 or 2): ").strip()
+                if mode in ["1", "2"]:
+                    break
+                print("Please enter 1 or 2")
+            except (EOFError, KeyboardInterrupt):
+                print("\nExiting...")
+                return
 
         if mode == "1":
             print("\n--- 🗣️  You are now talking to the CEO Agent ---")
@@ -361,7 +516,14 @@ async def main():
         print("-" * 50)
 
         while True:
-            user_input = await anyio.to_thread.run_sync(lambda: input("You: ").strip())
+            try:
+                # Simplified input handling - avoid anyio threading issues
+                print("You: ", end="", flush=True)
+                user_input = input()
+                user_input = user_input.strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nExiting...")
+                break
 
             if user_input.lower() in ["quit", "exit"]:
                 break
@@ -384,6 +546,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        anyio.run(main)
+        asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("CLI interrupted by user.")

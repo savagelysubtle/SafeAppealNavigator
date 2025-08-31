@@ -6,7 +6,9 @@ from typing import Any, List, Optional
 from pydantic_ai import RunContext
 from pydantic_ai.mcp import MCPServer
 
-from ai_research_assistant.agents.base_pydantic_agent import BasePydanticAgent
+from ai_research_assistant.agents.base_pydantic_agent import (
+    BasePydanticAgent,
+)
 from ai_research_assistant.agents.ceo_agent.config import CEOAgentConfig
 from ai_research_assistant.agents.ceo_agent.prompts import analyze_user_request
 
@@ -22,10 +24,11 @@ class CEOAgent(BasePydanticAgent):
         llm_instance: Optional[Any] = None,
         toolsets: Optional[List[MCPServer]] = None,
     ):
-        # Initialize the parent class normally
+        # Initialize with the flexible BasePydanticAgent signature
+        # This supports both factory-created models and config-based models
         super().__init__(
             config=config or CEOAgentConfig(),
-            llm_instance=llm_instance,
+            llm_instance=llm_instance,  # Factory-created model instance (preferred)
             toolsets=toolsets,
         )
         self.config: CEOAgentConfig = self.config  # type: ignore
@@ -33,12 +36,60 @@ class CEOAgent(BasePydanticAgent):
         # Setup enhanced tools after initialization
         self._setup_enhanced_tools()
 
+        model_source = (
+            "factory-created model"
+            if llm_instance
+            else f"config model ({self.config.llm_model})"
+        )
         logger.info(
-            f"CEOAgent '{self.agent_name}' initialized with delegation capabilities."
+            f"CEOAgent '{self.agent_name}' initialized with delegation capabilities using {model_source} and {len(self.toolsets)} MCP toolsets."
+        )
+
+    @classmethod
+    def create_with_factory_model(
+        cls,
+        model_instance: Any,
+        config: Optional[CEOAgentConfig] = None,
+        toolsets: Optional[List[MCPServer]] = None,
+    ):
+        """
+        Preferred factory method for creating CEO agent with factory-generated model.
+
+        Args:
+            model_instance: PydanticAI model instance from unified factory
+            config: Optional CEO agent configuration (uses default if not provided)
+            toolsets: Optional MCP toolsets for the agent
+
+        Returns:
+            CEOAgent instance configured with factory model
+        """
+        return cls(
+            config=config or CEOAgentConfig(),
+            llm_instance=model_instance,
+            toolsets=toolsets,
         )
 
     def _setup_enhanced_tools(self):
         """Set up enhanced tools with intelligent delegation patterns"""
+
+        @self.pydantic_agent.tool
+        async def route_to_ceo_logic(ctx: RunContext[Any], user_request: str) -> str:
+            """
+            Route user requests through the CEO agent's business logic.
+
+            This tool ensures that all A2A requests are properly handled by the CEO agent's
+            respond_to_user method which contains all the intelligent delegation and analysis logic.
+
+            Args:
+                user_request: The user's request to process
+
+            Returns:
+                The CEO agent's response after processing through its business logic
+            """
+            logger.info(
+                f"Routing A2A request through CEO business logic: {user_request[:100]}..."
+            )
+            return await self.respond_to_user(user_request)
 
         @self.pydantic_agent.tool
         async def intelligent_delegate_to_orchestrator(
@@ -127,6 +178,8 @@ class CEOAgent(BasePydanticAgent):
     async def respond_to_user(self, user_input: str, **kwargs) -> str:
         """
         Process user input and either handle directly or delegate to Orchestrator.
+
+        This method is called by the A2A framework when requests come in.
         """
         logger.info(f"CEO Agent received user input: '{user_input[:100]}...'")
 
@@ -150,9 +203,10 @@ class CEOAgent(BasePydanticAgent):
                 )
                 logger.info("Forcing delegation for work request")
 
-            result = await self.pydantic_agent.run(user_prompt=user_prompt, **kwargs)
+            # Use the new run method signature
+            result = await self.run(user_prompt, **kwargs)
 
-            response = result.data if hasattr(result, "data") else str(result)
+            response = str(result)
             logger.info(f"CEO Agent response generated: {len(response)} characters")
 
             # Log if we detect the agent is fabricating work completion

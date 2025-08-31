@@ -1,5 +1,5 @@
 # FILE: src/ai_research_assistant/agents/base_pydantic_agent.py
-# (Corrected and Complete Version)
+# Pure PydanticAI Implementation with Factory Support
 
 import logging
 from typing import Any, List, Optional
@@ -10,26 +10,15 @@ from pydantic_ai.mcp import MCPServer
 from ai_research_assistant.agents.base_pydantic_agent_config import (
     BasePydanticAgentConfig,
 )
-from ai_research_assistant.core.unified_llm_factory import get_llm_factory
 
 logger = logging.getLogger(__name__)
 
 
-# --- CRITICAL FIX: Define the @agent_skill decorator ---
-def agent_skill(func):
-    """
-    Decorator to mark agent methods as A2A skills.
-    This allows the fasta2a_wrapper to discover them.
-    """
-    func._is_agent_skill = True
-    func._skill_name = func.__name__
-    return func
-
-
 class BasePydanticAgent:
     """
-    A base class for all agents in the system, providing common
-    initialization for LLM, MCP tools, and the underlying PydanticAIAgent.
+    Pure PydanticAI agent implementation following native patterns.
+    Supports both direct model strings and factory-created model instances.
+    Provides A2A compatibility through PydanticAI's built-in to_a2a() method.
     """
 
     def __init__(
@@ -42,56 +31,115 @@ class BasePydanticAgent:
         self.agent_name = self.config.agent_name
         self.toolsets = toolsets or []
 
-        if llm_instance:
-            self.llm = llm_instance
+        # --- FLEXIBLE MODEL INITIALIZATION ---
+        # Support both factory-created instances and direct model strings
+        if llm_instance is not None:
+            # Use factory-created model instance (preferred for dynamic model selection)
+            model = llm_instance
+            logger.info(
+                f"Agent '{self.agent_name}' using factory-created model instance"
+            )
         else:
-            llm_factory = get_llm_factory()
-            self.llm = llm_factory.create_llm_from_config(
-                {
-                    "provider": self.config.llm_provider,
-                    "model_name": self.config.llm_model_name,
-                }
+            # Use model string from config (fallback for direct instantiation)
+            model = self.config.llm_model
+            logger.info(
+                f"Agent '{self.agent_name}' using config model: {self.config.llm_model}"
             )
 
-        # Initialize the underlying Agent with model and toolsets
-        self.pydantic_agent = Agent(  # type: ignore
-            self.llm,
-            system_prompt=(
-                self.config.pydantic_ai_instructions
-                or self.config.pydantic_ai_system_prompt
-                or ""
-            ),
-            toolsets=self.toolsets
-            if self.toolsets
-            else [],  # Pass toolsets directly to Agent
+        # --- PURE PydanticAI INITIALIZATION ---
+        # Create Agent with model and system_prompt following PydanticAI patterns
+        self.pydantic_agent = Agent(
+            model,  # Either factory instance or model string
+            system_prompt=self._get_instructions(),  # System prompt for agent behavior
         )
-        logger.info(f"Agent '{self.agent_name}' initialized successfully.")
+
+        # Add MCP toolsets - PydanticAI handles them automatically when passed to Agent
+        # Note: Your existing MCP client creates the correct MCPServer types
+
+        logger.info(f"PydanticAI Agent '{self.agent_name}' initialized successfully")
+        if self.toolsets:
+            logger.info(
+                f"Agent '{self.agent_name}' has {len(self.toolsets)} MCP toolsets available"
+            )
+
+    def _get_instructions(self) -> str:
+        """
+        Get instructions for the agent, prioritizing 'instructions' over 'system_prompt'
+        following PydanticAI conventions.
+        """
+        if self.config.instructions:
+            return self.config.instructions
+        elif self.config.system_prompt:
+            logger.warning(
+                f"Agent '{self.agent_name}' using deprecated system_prompt. "
+                "Consider migrating to 'instructions' field."
+            )
+            return self.config.system_prompt
+        else:
+            return f"You are {self.agent_name}, an AI research assistant."
+
+    async def run(self, prompt: str, **kwargs) -> Any:
+        """
+        Primary interface method following PydanticAI patterns.
+        This is the method that A2A will automatically expose.
+        """
+        logger.debug(f"Running {self.agent_name} with prompt: {prompt[:100]}...")
+
+        try:
+            result = await self.pydantic_agent.run(prompt, **kwargs)
+            logger.debug(f"Agent {self.agent_name} completed successfully")
+            return result.output
+        except Exception as e:
+            logger.error(f"Agent {self.agent_name} failed: {e}")
+            raise
+
+    def to_a2a(self, **kwargs):
+        """
+        Convert this agent to A2A format using PydanticAI's native support.
+        This method provides the A2A server interface.
+        """
+        # Merge config defaults with kwargs
+        a2a_config = {
+            "name": self.config.agent_name,
+            "version": self.config.version,
+            "description": self.config.description,
+            **kwargs,  # Allow override of defaults
+        }
+
+        logger.info(
+            f"Converting {self.agent_name} to A2A format with native PydanticAI support"
+        )
+        return self.pydantic_agent.to_a2a(**a2a_config)
 
     async def initialize_mcp_tools(self):
         """
-        MCP tools are already initialized when toolsets are passed to the Agent constructor.
-        This method is kept for compatibility but doesn't need to do anything.
+        Compatibility method - MCP tools are automatically initialized
+        when toolsets are passed to the Agent constructor.
         """
         logger.debug(
-            f"MCP tools already initialized for {self.agent_name} via toolsets parameter"
+            f"MCP tools already initialized for {self.agent_name} via PydanticAI Agent constructor"
         )
         if self.toolsets:
             logger.info(
-                f"Agent {self.agent_name} has {len(self.toolsets)} MCP toolsets available."
+                f"Agent {self.agent_name} has {len(self.toolsets)} MCP toolsets available"
             )
 
-    async def run_skill(self, prompt: str, **kwargs) -> Any:
-        """A generic method to run the underlying PydanticAIAgent."""
-        logger.debug(
-            f"Running skill for {self.agent_name} with prompt: {prompt[:100]}..."
-        )
-        result = await self.pydantic_agent.run(prompt, **kwargs)
-        return result.output
+    # --- FACTORY INTEGRATION HELPERS ---
+    @classmethod
+    def create_with_factory_model(
+        cls,
+        config: BasePydanticAgentConfig,
+        model_instance: Any,
+        toolsets: Optional[List[MCPServer]] = None,
+    ):
+        """
+        Factory method for creating agents with factory-generated model instances.
+        This is the preferred method when using the unified LLM factory.
+        """
+        return cls(config=config, llm_instance=model_instance, toolsets=toolsets)
 
-    def to_a2a(self, *args, **kwargs):
-        """
-        Convert this agent to A2A format by delegating to the underlying pydantic_agent.
-        This ensures that registered tools are properly available in the A2A interface.
-        """
-        logger.info(f"Converting {self.agent_name} to A2A format with registered tools")
-        return self.pydantic_agent.to_a2a(*args, **kwargs)
+    # --- FUTURE: Add structured output support ---
+    # async def run_structured(self, prompt: str, result_type: Type, **kwargs):
+    #     """Run agent with structured output validation."""
+    #     result = await self.pydantic_agent.run(prompt, result_type=result_type, **kwargs)
+    #     return result.output

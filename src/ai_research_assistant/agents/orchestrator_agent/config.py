@@ -16,12 +16,11 @@ class OrchestratorAgentConfig(BasePydanticAgentConfig):
     agent_name: str = "OrchestratorAgent"
     agent_id: str = "orchestrator_agent_001"
 
-    # --- ADDED DEFAULT MODEL ---
-    # This ensures the agent can initialize its LLM factory.
-    llm_model_name: str = "gemini-2.5-flash-preview-05-20"
-    # --- END CORRECTION ---
+    # Use stable Gemini 2.5 Pro model for enhanced reasoning capabilities
+    llm_model: str = "gemini-2.5-pro"
 
-    pydantic_ai_system_prompt: str = (
+    # Use 'instructions' field following PydanticAI conventions
+    instructions: str = (
         "You are the Orchestrator Agent for SafeAppealNavigator, a specialized legal case management system "
         "for WorkSafe BC and WCAT appeals. Your role is to receive tasks from the CEO agent, break them down "
         "into smaller, executable steps, and coordinate with specialized agents to accomplish legal case management goals.\n\n"

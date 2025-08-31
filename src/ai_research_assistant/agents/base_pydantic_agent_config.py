@@ -7,24 +7,19 @@ from pydantic import BaseModel, Field
 
 class BasePydanticAgentConfig(BaseModel):
     """
-    Configuration for BasePydanticAgent.
+    Configuration for BasePydanticAgent following PydanticAI native patterns.
     """
 
     agent_id: str = Field(description="Unique identifier for the agent.")
     agent_name: str = Field(description="Human-readable name for the agent.")
 
-    # --- DEFINITIVE FIX: Use the correct provider key for pydantic-ai ---
-    # The library expects the string format "google:<model_name>" for this provider.
-    llm_provider: str = Field(
-        default="google",
-        description="LLM provider key (e.g., 'openai', 'google', 'anthropic', 'test').",
+    # --- PydanticAI NATIVE MODEL SPECIFICATION ---
+    # Use model name that PydanticAI recognizes (without provider prefix)
+    llm_model: str = Field(
+        default="gemini-2.5-pro",
+        description="Model name in PydanticAI format (e.g., 'gemini-2.5-pro', 'gpt-4')",
     )
 
-    # Use the latest Gemini 2.5 Flash model for better performance and quota handling
-    llm_model_name: Optional[str] = Field(
-        default="gemini-2.5-flash-preview-05-20",
-        description="Specific model name for the provider.",
-    )
     llm_temperature: float = Field(
         default=0.7, description="LLM temperature for generation."
     )
@@ -32,15 +27,27 @@ class BasePydanticAgentConfig(BaseModel):
         default=4096, description="LLM maximum tokens for generation."
     )
 
-    pydantic_ai_instructions: Optional[str] = Field(
-        default=None, description="Default instructions for the pydantic_ai.Agent."
+    # --- PydanticAI AGENT CONFIGURATION ---
+    # Use 'instructions' as the primary field (PydanticAI standard)
+    instructions: Optional[str] = Field(
+        default=None, description="Primary instructions for the PydanticAI Agent."
     )
-    pydantic_ai_system_prompt: Optional[str] = Field(
-        default=None, description="Default system prompt for the pydantic_ai.Agent."
+
+    # Keep system_prompt for backward compatibility, but instructions takes precedence
+    system_prompt: Optional[str] = Field(
+        default=None,
+        description="Alternative system prompt (use instructions instead).",
     )
-    pydantic_ai_retries: int = Field(
+
+    retries: int = Field(
         default=1,
-        description="Number of retries Pydantic AI should attempt for recoverable errors.",
+        description="Number of retries PydanticAI should attempt for recoverable errors.",
+    )
+
+    # Agent metadata for A2A protocol
+    version: str = Field(default="1.0.0", description="Agent version for A2A protocol")
+    description: str = Field(
+        default="AI Research Agent", description="Agent description for A2A"
     )
 
     custom_settings: Dict[str, Any] = Field(default_factory=dict)
